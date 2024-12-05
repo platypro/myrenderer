@@ -50,7 +50,22 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("zglfw", zglfw.module("root"));
     exe.linkLibrary(zglfw.artifact("glfw"));
 
+    const zigimg_dependency = b.dependency("zigimg", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    exe.root_module.addImport("zigimg", zigimg_dependency.module("zigimg"));
+
+    const mach_dep = b.dependency("mach", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    exe.root_module.addImport("mach", mach_dep.module("mach"));
+
     b.installFile("src/terrain.wgsl", "bin/terrain.wgsl");
+    b.installFile("src/HEIGHTMAP.png", "bin/HEIGHTMAP.png");
 
     // This creates a build step. It will be visible in the `zig build --help` menu,
     // and can be selected like this: `zig build run`
