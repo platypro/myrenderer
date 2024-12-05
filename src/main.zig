@@ -16,10 +16,11 @@ const Uniform = extern struct {
     xform: Mat,
 };
 
-fn lookAt(camera: Vec3, target: Vec3, up_ref: Vec3) Mat {
+fn lookAt(camera_: Vec3, target: Vec3, up_ref: Vec3) Mat {
+    const camera = camera_.mulScalar(-1);
     const forward = target.sub(&camera).normalize(0.0);
     const up = up_ref.cross(&forward).normalize(0.0);
-    const right = up.cross(&forward).normalize(0.0);
+    const right = forward.cross(&up).normalize(0.0);
 
     return Mat.init(
         &Vec4.init(right.v[0], right.v[1], right.v[2], -camera.dot(&right)),
@@ -27,6 +28,14 @@ fn lookAt(camera: Vec3, target: Vec3, up_ref: Vec3) Mat {
         &Vec4.init(forward.v[0], forward.v[1], forward.v[2], -camera.dot(&forward)),
         &Vec4.init(0.0, 0.0, 0.0, 1.0),
     );
+}
+
+fn matMult(mats: []const Mat) Mat {
+    var result = Mat.ident;
+    for (mats) |mat| {
+        result = result.mul(&mat);
+    }
+    return result;
 }
 
 pub fn main() !void {
@@ -151,13 +160,15 @@ pub fn main() !void {
         const camX = std.math.cos(@as(f32, @floatCast(glfw.getTime()))) * 20.0;
         const camZ = std.math.sin(@as(f32, @floatCast(glfw.getTime()))) * 20.0;
         const model = lookAt(
-            Vec3.init(camX, -15.0, camZ),
+            Vec3.init(camX, 15.0, camZ),
             Vec3.init(0.0, 0.0, 0.0),
             Vec3.init(0.0, 1.0, 0.0),
         );
         var perspective = Mat.projection2D(.{ .left = -1.0, .right = 1.0, .top = 1.0, .bottom = -1.0, .near = 0.1, .far = 100.0 });
         perspective.v[2].v[3] = 1;
-        const mvp = Mat.rotateZ(std.math.pi / 2.0).mul(&perspective.mul(&model));
+        const mvp = matMult(&.{ Mat.rotateZ(-std.math.pi / 2.0), perspective, model });
+        // const mvp = .mul(&perspective.mul(&model));
+        //const mvp = perspective.mul(&model);
         const uniform = gctx.uniformsAllocate(Uniform, 1);
 
         uniform.slice[0].xform = mvp;

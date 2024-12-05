@@ -56,6 +56,14 @@
             .url = "git+https://github.com/zig-gamedev/zglfw.git#ce756faacf52c7531bc09bdc0201004596c0a01f",
             .hash = "1220a4d35f5b9b3f711853950c70ca372f0806421d78a7539e95249e03a49bca0ac2",
         },
+        .zigimg = .{
+            .url = "git+https://github.com/zigimg/zigimg.git#5b5d718159c6ec223a54c9bb960690576e5df9c2",
+            .hash = "122040d9cc905342547e1e9da227a7f16fae5e7ae23134cb62aaef64c5b2c4f58828",
+        },
+        .mach = .{
+            .url = "git+https://github.com/hexops/mach.git#ad5700cf48ef2cbab6008993b92a8fb2af3c5367",
+            .hash = "1220c454cf824c6198dc89a3589da676ea88d4fada7838f8fdcd8907a2b55b85d026",
+        },
     },
     .paths = .{
         "build.zig",
