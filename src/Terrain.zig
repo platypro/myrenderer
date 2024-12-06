@@ -10,6 +10,74 @@ const Mat = math.Mat4x4;
 pub const mach_module = .terrain;
 pub const mach_systems = .{ .init, .draw };
 
+// Shader inputs:
+//    VertexIndex (u32)      - The current vertex ID
+//    heightmap (array<f32>) - The heightmap data
+//    size (u32)             - The heightmap width
+// Shader Outputs:
+//    vertex_out (vec4<f32>) - The output vertex
+const shader_genvertices_src =
+    \\ var vertex_out: vec4<f32>;
+    \\ var vertex_value: f32;
+    \\ {
+    \\    var vertex_at = VertexIndex % 6;
+    \\    var quad_at = (VertexIndex - vertex_at) / 6;
+    \\    var quad_at_coords = vec2<f32>(f32(quad_at / data.size), f32(quad_at % data.size));
+    \\
+    \\    const quad_vals = array<vec2<f32>, 6>(
+    \\        vec2<f32>(1.0, 0.0),
+    \\        vec2<f32>(1.0, 1.0),
+    \\        vec2<f32>(0.0, 0.0),
+    \\        vec2<f32>(1.0, 1.0),
+    \\        vec2<f32>(0.0, 1.0),
+    \\        vec2<f32>(0.0, 0.0)
+    \\    );
+    \\    var quadValue = 0.2 * (quad_vals[vertex_at] + quad_at_coords) - 0.1 * f32(data.size);
+    \\
+    \\    var quad_lookup = array<u32, 6>(
+    \\        quad_at + data.size,
+    \\        quad_at + data.size + 1,
+    \\        quad_at,
+    \\        quad_at + data.size + 1,
+    \\        quad_at + 1,
+    \\        quad_at,
+    \\    );
+    \\
+    \\    vertex_value = heightmap[quad_lookup[vertex_at]];
+    \\    vertex_out = vec4<f32>(quadValue.x, vertex_value * 5.0, quadValue.y, 1.0);
+    \\ }
+;
+
+const shader_render_src =
+    \\@group(0) @binding(0) var<uniform> data: UniformStruct;
+    \\@group(0) @binding(1) var<storage,read> heightmap: array<f32>;
+    \\
+    \\struct UniformStruct {
+    \\    size: u32,
+    \\    xform: mat4x4<f32>,
+    \\}
+    \\
+    \\struct FragPass {
+    \\    @builtin(position) pos: vec4<f32>,
+    \\    @location(0) color: vec4<f32>,
+    \\}
+    \\
+    \\@vertex fn vertex_main(
+    \\    @builtin(vertex_index) VertexIndex : u32
+    \\) -> FragPass{
+++ shader_genvertices_src ++
+    \\    var out: FragPass;
+    \\    out.pos = data.xform * vertex_out;
+    \\    out.color = vec4(vertex_value, vertex_value, vertex_value, 1.0);
+    \\
+    \\    return out;
+    \\}
+    \\
+    \\@fragment fn frag_main(input: FragPass) -> @location(0) vec4<f32> {
+    \\    return input.color;
+    \\}
+;
+
 const Uniform = extern struct {
     size: u32,
     padding1: u32,
@@ -63,7 +131,7 @@ pub fn load_terrain(self: *@This(), renderer: *Renderer, allocator: std.mem.Allo
     });
 }
 
-pub fn init(self: *@This(), app: *App, renderer: *Renderer) !void {
+pub fn init(self: *@This(), renderer: *Renderer) !void {
     const gctx = renderer.gctx;
 
     self.* = .{};
@@ -75,10 +143,7 @@ pub fn init(self: *@This(), app: *App, renderer: *Renderer) !void {
     errdefer renderer.gctx.releaseResource(self.bind_group_layout_handle.?);
 
     self.pipeline_handle = pipeline: {
-        const shader_source_file = try std.fs.cwd().openFile("terrain.wgsl", .{});
-        defer shader_source_file.close();
-        const shader_source = try shader_source_file.readToEndAllocOptions(app.allocator, 2048, null, @alignOf(u8), 0);
-        defer app.allocator.free(shader_source);
+        const shader_source = shader_render_src;
         const shader = gpu.createWgslShaderModule(gctx.device, shader_source, null);
         defer shader.release();
 

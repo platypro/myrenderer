@@ -1,5 +1,6 @@
 const gpu = @import("zgpu");
 const glfw = @import("zglfw");
+const mach = @import("mach");
 const math = @import("mach").math;
 const std = @import("std");
 
@@ -15,6 +16,10 @@ const App = @import("App.zig");
 current_xform: Mat,
 depth_texture_view_handle: gpu.TextureViewHandle,
 gctx: *gpu.GraphicsContext,
+
+light_sources: mach.Objects(.{}, struct {
+    position: Vec3,
+}),
 
 fn lookAt(camera_: Vec3, target: Vec3, up_ref: Vec3) Mat {
     const camera = camera_.mulScalar(-1);
@@ -69,6 +74,10 @@ pub fn init(self: *@This(), app: *App) !void {
         .sample_count = 1,
     });
     self.depth_texture_view_handle = self.gctx.createTextureView(depth_texture_handle, .{});
+
+    self.light_sources.lock();
+    defer self.light_sources.unlock();
+    _ = try self.light_sources.new(.{ .position = Vec3.init(1.0, 8.0, 1.0) });
 }
 
 pub fn tick(self: *@This()) !void {
