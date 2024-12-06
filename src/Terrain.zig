@@ -1,11 +1,9 @@
 const gpu = @import("zgpu");
 const std = @import("std");
 const img = @import("zigimg");
-const math = @import("mach").math;
 const Renderer = @import("Renderer.zig");
 const App = @import("App.zig");
-
-const Mat = math.Mat4x4;
+const math = @import("math.zig");
 
 pub const mach_module = .terrain;
 pub const mach_systems = .{ .init, .draw };
@@ -18,7 +16,6 @@ pub const mach_systems = .{ .init, .draw };
 //    vertex_out (vec4<f32>) - The output vertex
 const shader_genvertices_src =
     \\ var vertex_out: vec4<f32>;
-    \\ var vertex_value: f32;
     \\ {
     \\    var vertex_at = VertexIndex % 6;
     \\    var quad_at = (VertexIndex - vertex_at) / 6;
@@ -43,10 +40,18 @@ const shader_genvertices_src =
     \\        quad_at,
     \\    );
     \\
-    \\    vertex_value = heightmap[quad_lookup[vertex_at]];
-    \\    vertex_out = vec4<f32>(quadValue.x, vertex_value * 5.0, quadValue.y, 1.0);
+    \\    var vertex_value = heightmap[quad_lookup[vertex_at]];
+    \\    vertex_out = vec4<f32>(quadValue.x, vertex_value, quadValue.y, 1.0);
     \\ }
 ;
+
+// const shader_shadowmap_src =
+// \\@group(0) @binding(0) var<uniform> data: UniformStruct;
+// \\
+// \\struct UniformStruct {
+// \\  size: u32,
+// \\  xform: mat4x4<f32>
+// \\}
 
 const shader_render_src =
     \\@group(0) @binding(0) var<uniform> data: UniformStruct;
@@ -68,7 +73,7 @@ const shader_render_src =
 ++ shader_genvertices_src ++
     \\    var out: FragPass;
     \\    out.pos = data.xform * vertex_out;
-    \\    out.color = vec4(vertex_value, vertex_value, vertex_value, 1.0);
+    \\    out.color = vec4(vertex_out.y, vertex_out.y, vertex_out.y, 1.0);
     \\
     \\    return out;
     \\}
@@ -83,7 +88,7 @@ const Uniform = extern struct {
     padding1: u32,
     padding2: u32,
     padding3: u32,
-    xform: Mat,
+    xform: math.Mat,
 };
 
 bind_group_layout_handle: ?gpu.BindGroupLayoutHandle = null,
@@ -212,8 +217,10 @@ pub fn draw(self: *@This(), renderer: *Renderer) void {
     });
 
     const alloc = gctx.uniformsAllocate(Uniform, 1);
+    const xform = math.matMult(&.{ renderer.current_xform, math.Mat.scale(math.Vec3.init(1.0, 5.0, 1.0)) });
+
     alloc.slice[0].size = self.terrain_size;
-    alloc.slice[0].xform = renderer.current_xform;
+    alloc.slice[0].xform = xform;
 
     pass.setPipeline(pipeline);
     pass.setBindGroup(0, bind_group, &.{alloc.offset});

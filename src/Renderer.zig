@@ -1,47 +1,21 @@
 const gpu = @import("zgpu");
 const glfw = @import("zglfw");
 const mach = @import("mach");
-const math = @import("mach").math;
 const std = @import("std");
+const math = @import("math.zig");
 
 pub const mach_module = .renderer;
 pub const mach_systems = .{ .init, .tick };
 
-const Mat = math.Mat4x4;
-const Vec3 = math.Vec3;
-const Vec4 = math.Vec4;
-
 const App = @import("App.zig");
 
-current_xform: Mat,
+current_xform: math.Mat,
 depth_texture_view_handle: gpu.TextureViewHandle,
 gctx: *gpu.GraphicsContext,
 
 light_sources: mach.Objects(.{}, struct {
-    position: Vec3,
+    position: math.Vec3,
 }),
-
-fn lookAt(camera_: Vec3, target: Vec3, up_ref: Vec3) Mat {
-    const camera = camera_.mulScalar(-1);
-    const forward = target.sub(&camera).normalize(0.0);
-    const up = up_ref.cross(&forward).normalize(0.0);
-    const right = forward.cross(&up).normalize(0.0);
-
-    return Mat.init(
-        &Vec4.init(right.v[0], right.v[1], right.v[2], -camera.dot(&right)),
-        &Vec4.init(up.v[0], up.v[1], up.v[2], -camera.dot(&up)),
-        &Vec4.init(forward.v[0], forward.v[1], forward.v[2], -camera.dot(&forward)),
-        &Vec4.init(0.0, 0.0, 0.0, 1.0),
-    );
-}
-
-fn matMult(mats: []const Mat) Mat {
-    var result = Mat.ident;
-    for (mats) |mat| {
-        result = result.mul(&mat);
-    }
-    return result;
-}
 
 pub fn init(self: *@This(), app: *App) !void {
     self.gctx = try gpu.GraphicsContext.create(
@@ -77,18 +51,18 @@ pub fn init(self: *@This(), app: *App) !void {
 
     self.light_sources.lock();
     defer self.light_sources.unlock();
-    _ = try self.light_sources.new(.{ .position = Vec3.init(1.0, 8.0, 1.0) });
+    _ = try self.light_sources.new(.{ .position = math.Vec3.init(1.0, 8.0, 1.0) });
 }
 
 pub fn tick(self: *@This()) !void {
-    const camX = std.math.cos(@as(f32, @floatCast(glfw.getTime()))) * 20.0;
-    const camZ = std.math.sin(@as(f32, @floatCast(glfw.getTime()))) * 20.0;
-    const model = lookAt(
-        Vec3.init(camX, 15.0, camZ),
-        Vec3.init(0.0, 0.0, 0.0),
-        Vec3.init(0.0, 1.0, 0.0),
+    const camX = math.std.cos(@as(f32, @floatCast(glfw.getTime()))) * 20.0;
+    const camZ = math.std.sin(@as(f32, @floatCast(glfw.getTime()))) * 20.0;
+    const view = math.lookAt(
+        math.Vec3.init(camX, 15.0, camZ),
+        math.Vec3.init(0.0, 0.0, 0.0),
+        math.Vec3.init(0.0, 1.0, 0.0),
     );
-    var perspective = Mat.projection2D(.{ .left = -1.0, .right = 1.0, .top = 1.0, .bottom = -1.0, .near = 0.1, .far = 100.0 });
+    var perspective = math.Mat.projection2D(.{ .left = -1.0, .right = 1.0, .top = 1.0, .bottom = -1.0, .near = 0.1, .far = 100.0 });
     perspective.v[2].v[3] = 1;
-    self.current_xform = matMult(&.{ Mat.rotateZ(-std.math.pi / 2.0), perspective, model });
+    self.current_xform = math.matMult(&.{ math.Mat.rotateZ(-math.std.pi / 2.0), perspective, view });
 }
