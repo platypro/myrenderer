@@ -9,7 +9,7 @@ pub const mach_module = .terrain;
 pub const mach_systems = .{ .init, .draw };
 
 // Shader inputs:
-//    VertexIndex (u32)      - The current vertex ID
+//    vertex_index (u32)      - The current vertex ID
 //    heightmap (array<f32>) - The heightmap data
 //    size (u32)             - The heightmap width
 // Shader Outputs:
@@ -17,8 +17,8 @@ pub const mach_systems = .{ .init, .draw };
 const shader_genvertices_src =
     \\ var vertex_out: vec4<f32>;
     \\ {
-    \\    var vertex_at = VertexIndex % 6;
-    \\    var quad_at = (VertexIndex - vertex_at) / 6;
+    \\    var vertex_at = vertex_index % 6;
+    \\    var quad_at = (vertex_index - vertex_at) / 6;
     \\    var quad_at_coords = vec2<f32>(f32(quad_at / data.size), f32(quad_at % data.size));
     \\
     \\    const quad_vals = array<vec2<f32>, 6>(
@@ -45,14 +45,6 @@ const shader_genvertices_src =
     \\ }
 ;
 
-// const shader_shadowmap_src =
-// \\@group(0) @binding(0) var<uniform> data: UniformStruct;
-// \\
-// \\struct UniformStruct {
-// \\  size: u32,
-// \\  xform: mat4x4<f32>
-// \\}
-
 const shader_render_src =
     \\@group(0) @binding(0) var<uniform> data: UniformStruct;
     \\@group(0) @binding(1) var<storage,read> heightmap: array<f32>;
@@ -68,8 +60,8 @@ const shader_render_src =
     \\}
     \\
     \\@vertex fn vertex_main(
-    \\    @builtin(vertex_index) VertexIndex : u32
-    \\) -> FragPass{
+    \\    @builtin(vertex_index) vertex_index : u32
+    \\) -> FragPass {
 ++ shader_genvertices_src ++
     \\    var out: FragPass;
     \\    out.pos = data.xform * vertex_out;
@@ -166,7 +158,7 @@ pub fn init(self: *@This(), renderer: *Renderer) !void {
             },
             .primitive = gpu.wgpu.PrimitiveState{
                 .front_face = .cw,
-                .cull_mode = .none,
+                .cull_mode = .front,
                 .topology = .triangle_list,
             },
             .depth_stencil = &.{
@@ -189,32 +181,8 @@ pub fn draw(self: *@This(), renderer: *Renderer) void {
     const gctx = renderer.gctx;
     const pipeline = gctx.lookupResource(self.pipeline_handle.?) orelse unreachable;
     const bind_group = gctx.lookupResource(self.bind_group_handle.?) orelse unreachable;
-    const depth_texture_view = gctx.lookupResource(renderer.depth_texture_view_handle) orelse unreachable;
 
-    const back_buffer_view = gctx.swapchain.getCurrentTextureView();
-    defer back_buffer_view.release();
-
-    const encoder = gctx.device.createCommandEncoder(null);
-    defer encoder.release();
-
-    const color_attachments = [_]gpu.wgpu.RenderPassColorAttachment{.{
-        .view = back_buffer_view,
-        .load_op = .clear,
-        .store_op = .store,
-    }};
-
-    const depth_attachment = gpu.wgpu.RenderPassDepthStencilAttachment{
-        .view = depth_texture_view,
-        .depth_load_op = .clear,
-        .depth_store_op = .store,
-        .depth_clear_value = 0.0,
-    };
-
-    const pass = encoder.beginRenderPass(.{
-        .color_attachments = &color_attachments,
-        .color_attachment_count = 1,
-        .depth_stencil_attachment = &depth_attachment,
-    });
+    var pass = renderer.begin_pass(.{});
 
     const alloc = gctx.uniformsAllocate(Uniform, 1);
     const xform = math.matMult(&.{ renderer.current_xform, math.Mat.scale(math.Vec3.init(1.0, 5.0, 1.0)) });
@@ -228,8 +196,4 @@ pub fn draw(self: *@This(), renderer: *Renderer) void {
 
     pass.end();
     pass.release();
-
-    const commands = encoder.finish(null);
-    defer commands.release();
-    gctx.submit(&.{commands});
 }

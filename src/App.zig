@@ -36,8 +36,9 @@ pub fn main(
     while (!app.window.shouldClose()) {
         glfw.pollEvents();
 
-        renderer_mod.call(.tick);
+        renderer_mod.call(.render_begin);
         terrain_mod.call(.draw);
+        renderer_mod.call(.render_end);
 
         _ = renderer.gctx.present();
         app.window.swapBuffers();
