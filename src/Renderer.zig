@@ -5,12 +5,14 @@ const std = @import("std");
 const math = @import("math.zig");
 
 pub const mach_module = .renderer;
-pub const mach_systems = .{ .init, .render_begin, .render_end };
+pub const mach_systems = .{ .init, .render_begin, .render_end, .deinit };
 
 const App = @import("App.zig");
 
 const shadow_map_segments = 3;
 const shadow_map_resolutions = .{ 512, 256, 128 };
+
+const Renderer = @This();
 
 camera_location: math.Vec3,
 current_xform: math.Mat,
@@ -24,6 +26,9 @@ light_sources: mach.Objects(.{}, struct {
     position: math.Vec3,
     shadow_maps: [shadow_map_segments]gpu.BufferHandle,
 }),
+
+pipelines: mach.Objects(.{}, Pipeline),
+instances: mach.Objects(.{}, Instance),
 
 pub fn init(self: *@This(), app: *App) !void {
     self.gctx = try gpu.GraphicsContext.create(
@@ -91,31 +96,205 @@ pub fn render_end(self: *@This()) !void {
     self.back_buffer_view.release();
 }
 
-const PassOptions = struct {
-    stencil: bool = true,
-    color: bool = true,
+pub fn deinit(self: *@This(), app: *App) void {
+    self.gctx.destroy(app.allocator);
+}
+
+const PassType = enum {
+    custom,
+    shadow_map,
 };
 
-pub fn begin_pass(
-    self: *@This(),
-    options: PassOptions,
-) gpu.wgpu.RenderPassEncoder {
-    const color_attachments: []const gpu.wgpu.RenderPassColorAttachment = if (options.color) &.{.{
-        .view = self.back_buffer_view,
-        .load_op = .clear,
-        .store_op = .store,
-    }} else &.{};
+pub const Pipeline = struct {
+    pipeline_handle: gpu.RenderPipelineHandle,
+    bind_group_layout_handle: gpu.BindGroupLayoutHandle,
+    num_bindings: u32 = 0,
+    num_dynamic_bindings: u32 = 0,
 
-    const depth_attachment = gpu.wgpu.RenderPassDepthStencilAttachment{
-        .view = self.depth_texture_view,
-        .depth_load_op = .clear,
-        .depth_store_op = .store,
-        .depth_clear_value = 0.0,
+    const Options = struct {
+        shader_source: [*:0]const u8,
+        buffers: []const gpu.wgpu.BindGroupLayoutEntry,
     };
 
-    return self.encoder.beginRenderPass(.{
-        .color_attachments = color_attachments.ptr,
-        .color_attachment_count = color_attachments.len,
-        .depth_stencil_attachment = if (options.stencil) &depth_attachment else null,
-    });
-}
+    pub fn create(renderer: *Renderer, options: Options) !mach.ObjectID {
+        const bind_group_layout_handle = renderer.gctx.createBindGroupLayout(options.buffers);
+
+        const shader = gpu.createWgslShaderModule(renderer.gctx.device, options.shader_source, null);
+        defer shader.release();
+
+        const color_targets = [_]gpu.wgpu.ColorTargetState{.{
+            .format = gpu.GraphicsContext.swapchain_format,
+        }};
+
+        const pipeline_layout = renderer.gctx.createPipelineLayout(&.{bind_group_layout_handle});
+        defer renderer.gctx.releaseResource(pipeline_layout);
+
+        const pipeline_descriptor = gpu.wgpu.RenderPipelineDescriptor{
+            .vertex = gpu.wgpu.VertexState{
+                .module = shader,
+                .entry_point = "vertex_main",
+            },
+            .primitive = gpu.wgpu.PrimitiveState{
+                .front_face = .cw,
+                .cull_mode = .front,
+                .topology = .triangle_list,
+            },
+            .depth_stencil = &.{
+                .format = .depth32_float,
+                .depth_write_enabled = true,
+                .depth_compare = .greater,
+            },
+            .fragment = &gpu.wgpu.FragmentState{
+                .module = shader,
+                .entry_point = "frag_main",
+                .target_count = color_targets.len,
+                .targets = &color_targets,
+            },
+        };
+        const pipeline = Pipeline{
+            .pipeline_handle = renderer.gctx.createRenderPipeline(pipeline_layout, pipeline_descriptor),
+            .num_bindings = @intCast(options.buffers.len),
+            .bind_group_layout_handle = bind_group_layout_handle,
+        };
+
+        renderer.pipelines.lock();
+        defer renderer.pipelines.unlock();
+        return try renderer.pipelines.new(pipeline);
+    }
+
+    pub fn destroy(renderer: *Renderer, pipeline_id: mach.ObjectID) void {
+        renderer.pipelines.lock();
+        defer renderer.pipelines.unlock();
+
+        const pipeline_handle = renderer.pipelines.get(pipeline_id, .pipeline_handle);
+        const pipeline = renderer.gctx.lookupResource(pipeline_handle);
+        pipeline.?.release();
+
+        const bind_group_layout_handle = renderer.pipelines.get(pipeline_id, .bind_group_layout_handle);
+        const bind_group_layout = renderer.gctx.lookupResource(bind_group_layout_handle);
+        bind_group_layout.?.release();
+
+        renderer.pipelines.delete(pipeline_id);
+    }
+
+    pub fn spawn_instance(renderer: *Renderer, pipeline_id: mach.ObjectID, app: *App) !mach.ObjectID {
+        const num_bindings = renderer.pipelines.get(pipeline_id, .num_bindings);
+        const result = Instance{
+            .pipeline = pipeline_id,
+            .bind_group_descriptors = try app.allocator.alloc(gpu.BindGroupEntryInfo, num_bindings),
+            .dynamic_offsets = try app.allocator.alloc(u32, num_bindings),
+            .dirty_bind_group = true,
+        };
+
+        for (0.., result.bind_group_descriptors) |i, *layout| {
+            layout.binding = @intCast(i);
+            layout.offset = 0;
+            layout.size = 0;
+            layout.sampler_handle = null;
+            layout.buffer_handle = null;
+            layout.texture_view_handle = null;
+        }
+
+        renderer.instances.lock();
+        defer renderer.instances.unlock();
+        return try renderer.instances.new(result);
+    }
+};
+
+pub const Instance = struct {
+    pipeline: mach.ObjectID,
+    bind_group_descriptors: []gpu.BindGroupEntryInfo,
+    bind_group_handle: ?gpu.BindGroupHandle = null,
+    dynamic_offsets: []u32,
+    dirty_bind_group: bool = true,
+
+    pub fn set_uniform(renderer: *Renderer, instance_id: mach.ObjectID, id: u32, T: type, value: T) void {
+        var entry = renderer.gctx.uniformsAllocate(T, 1);
+        entry.slice[0] = value;
+        const dyn_offset_arr = renderer.instances.get(instance_id, .dynamic_offsets);
+        dyn_offset_arr[id] = entry.offset;
+        renderer.instances.set(instance_id, .dirty_bind_group, true);
+
+        const bind_group_descriptors: []gpu.BindGroupEntryInfo = renderer.instances.get(instance_id, .bind_group_descriptors);
+        bind_group_descriptors[id].buffer_handle = renderer.gctx.uniforms.buffer;
+        bind_group_descriptors[id].size = @sizeOf(T);
+    }
+
+    pub fn set_storage_buffer(renderer: *Renderer, instance_id: mach.ObjectID, id: u32, buffer: gpu.BufferHandle, total_size: u32, offset: u32) void {
+        const bind_group_descriptors: []gpu.BindGroupEntryInfo = renderer.instances.get(instance_id, .bind_group_descriptors);
+        bind_group_descriptors[id].buffer_handle = buffer;
+        bind_group_descriptors[id].size = total_size;
+
+        const dynamic_offsets = renderer.instances.get(instance_id, .dynamic_offsets);
+        dynamic_offsets[id] = offset;
+
+        renderer.instances.set(instance_id, .dirty_bind_group, true);
+    }
+
+    pub fn get_bind_group(renderer: *Renderer, instance_id: mach.ObjectID) gpu.BindGroupHandle {
+        if (renderer.instances.get(instance_id, .dirty_bind_group)) {
+            const pipeline_id = renderer.instances.get(instance_id, .pipeline);
+
+            renderer.instances.set(instance_id, .bind_group_handle, renderer.gctx.createBindGroup(
+                renderer.pipelines.get(pipeline_id, .bind_group_layout_handle),
+                renderer.instances.get(instance_id, .bind_group_descriptors),
+            ));
+        }
+        return renderer.instances.get(instance_id, .bind_group_handle).?;
+    }
+
+    pub fn destroy(renderer: *Renderer, app: *App, instance_id: mach.ObjectID) void {
+        app.allocator.free(renderer.instances.get(instance_id, .bind_group_descriptors));
+        app.allocator.free(renderer.instances.get(instance_id, .dynamic_offsets));
+        renderer.instances.delete(instance_id);
+    }
+};
+
+pub const RenderPass = struct {
+    pass: gpu.wgpu.RenderPassEncoder,
+    base_transform: math.Mat,
+    uniform_offset: u32 = 0,
+
+    pub fn setInstance(self: *RenderPass, renderer: *Renderer, instance_id: mach.ObjectID) void {
+        const bind_group_handle = Instance.get_bind_group(renderer, instance_id);
+        const bind_group = renderer.gctx.lookupResource(bind_group_handle) orelse unreachable;
+        const pipeline = renderer.instances.get(instance_id, .pipeline);
+        const pipeline_handle = renderer.pipelines.get(pipeline, .pipeline_handle);
+
+        self.pass.setPipeline(renderer.gctx.lookupResource(pipeline_handle) orelse unreachable);
+        self.pass.setBindGroup(0, bind_group, renderer.instances.get(instance_id, .dynamic_offsets));
+    }
+
+    pub fn draw(self: *RenderPass, num_vertices: u32, num_instances: u32, first_vertex: u32, first_instance: u32) void {
+        self.pass.draw(num_vertices, num_instances, first_vertex, first_instance);
+    }
+
+    pub fn end(self: *RenderPass) void {
+        self.pass.end();
+        self.pass.release();
+    }
+
+    pub fn begin_draw_pass(self: *Renderer) RenderPass {
+        const color_attachments: []const gpu.wgpu.RenderPassColorAttachment = &.{.{
+            .view = self.back_buffer_view,
+            .load_op = .clear,
+            .store_op = .store,
+        }};
+
+        const depth_attachment = gpu.wgpu.RenderPassDepthStencilAttachment{
+            .view = self.depth_texture_view,
+            .depth_load_op = .clear,
+            .depth_store_op = .store,
+            .depth_clear_value = 0.0,
+        };
+
+        return RenderPass{
+            .pass = self.encoder.beginRenderPass(.{
+                .color_attachments = color_attachments.ptr,
+                .color_attachment_count = color_attachments.len,
+                .depth_stencil_attachment = &depth_attachment,
+            }),
+            .base_transform = self.current_xform,
+        };
+    }
+};

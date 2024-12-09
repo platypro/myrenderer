@@ -31,7 +31,7 @@ pub fn main(
 
     renderer_mod.call(.init);
     terrain_mod.call(.init);
-    try terrain.load_terrain(renderer, app.allocator, "HEIGHTMAP.png");
+    try terrain.load_terrain(renderer, app, "HEIGHTMAP.png");
 
     while (!app.window.shouldClose()) {
         glfw.pollEvents();
@@ -43,4 +43,9 @@ pub fn main(
         _ = renderer.gctx.present();
         app.window.swapBuffers();
     }
+
+    terrain_mod.call(.deinit);
+    renderer_mod.call(.deinit);
+
+    _ = app.gpa.detectLeaks();
 }

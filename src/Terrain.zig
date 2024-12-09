@@ -4,9 +4,10 @@ const img = @import("zigimg");
 const Renderer = @import("Renderer.zig");
 const App = @import("App.zig");
 const math = @import("math.zig");
+const mach = @import("mach");
 
 pub const mach_module = .terrain;
-pub const mach_systems = .{ .init, .draw };
+pub const mach_systems = .{ .init, .draw, .deinit };
 
 // Shader inputs:
 //    vertex_index (u32)      - The current vertex ID
@@ -77,24 +78,23 @@ const shader_render_src =
 
 const Uniform = extern struct {
     size: u32,
-    padding1: u32,
-    padding2: u32,
-    padding3: u32,
+    padding1: u32 = 0,
+    padding2: u32 = 0,
+    padding3: u32 = 0,
     xform: math.Mat,
 };
 
-bind_group_layout_handle: ?gpu.BindGroupLayoutHandle = null,
-bind_group_handle: ?gpu.BindGroupHandle = null,
-pipeline_handle: ?gpu.RenderPipelineHandle = null,
+pipeline: mach.ObjectID,
+instance: ?mach.ObjectID = null,
 terrain_handle: ?gpu.BufferHandle = null,
 terrain_size: u32 = 0,
 
-pub fn load_terrain(self: *@This(), renderer: *Renderer, allocator: std.mem.Allocator, filename: []const u8) !void {
+pub fn load_terrain(self: *@This(), renderer: *Renderer, app: *App, filename: []const u8) !void {
     const image_file = try std.fs.cwd().openFile(filename, .{});
     defer image_file.close();
     var stream_source = std.io.StreamSource{ .file = image_file };
-    var image = try img.png.load(&stream_source, allocator, .{ .temp_allocator = allocator });
-    defer image.deinit(allocator);
+    var image = try img.png.load(&stream_source, app.allocator, .{ .temp_allocator = app.allocator });
+    defer image.deinit(app.allocator);
 
     self.terrain_size = @intCast(image.width);
     const image_buf_size = self.terrain_size * self.terrain_size * 4;
@@ -122,78 +122,37 @@ pub fn load_terrain(self: *@This(), renderer: *Renderer, allocator: std.mem.Allo
         counter += COPY_SIZE;
     }
 
-    self.bind_group_handle = renderer.gctx.createBindGroup(self.bind_group_layout_handle.?, &.{
-        .{ .binding = 0, .buffer_handle = renderer.gctx.uniforms.buffer, .offset = 0, .size = @sizeOf(Uniform) },
-        .{ .binding = 1, .buffer_handle = self.terrain_handle, .offset = 0, .size = image_buf_size },
-    });
+    if (self.instance) |instance_handle| {
+        Renderer.Instance.destroy(renderer, app, instance_handle);
+    }
+
+    self.instance = try Renderer.Pipeline.spawn_instance(renderer, self.pipeline, app);
+    Renderer.Instance.set_storage_buffer(renderer, self.instance.?, 1, self.terrain_handle.?, image_buf_size, 0);
 }
 
 pub fn init(self: *@This(), renderer: *Renderer) !void {
-    const gctx = renderer.gctx;
-
-    self.* = .{};
-
-    self.bind_group_layout_handle = renderer.gctx.createBindGroupLayout(&.{
+    const pipeline = try Renderer.Pipeline.create(renderer, .{ .buffers = &.{
         gpu.bufferEntry(0, .{ .vertex = true }, .uniform, true, 0),
-        gpu.bufferEntry(1, .{ .vertex = true }, .read_only_storage, false, 0),
-    });
-    errdefer renderer.gctx.releaseResource(self.bind_group_layout_handle.?);
-
-    self.pipeline_handle = pipeline: {
-        const shader_source = shader_render_src;
-        const shader = gpu.createWgslShaderModule(gctx.device, shader_source, null);
-        defer shader.release();
-
-        const color_targets = [_]gpu.wgpu.ColorTargetState{.{
-            .format = gpu.GraphicsContext.swapchain_format,
-        }};
-
-        const pipeline_layout = gctx.createPipelineLayout(&.{self.bind_group_layout_handle.?});
-        defer gctx.releaseResource(pipeline_layout);
-
-        const pipeline_descriptor = gpu.wgpu.RenderPipelineDescriptor{
-            .vertex = gpu.wgpu.VertexState{
-                .module = shader,
-                .entry_point = "vertex_main",
-            },
-            .primitive = gpu.wgpu.PrimitiveState{
-                .front_face = .cw,
-                .cull_mode = .front,
-                .topology = .triangle_list,
-            },
-            .depth_stencil = &.{
-                .format = .depth32_float,
-                .depth_write_enabled = true,
-                .depth_compare = .greater,
-            },
-            .fragment = &gpu.wgpu.FragmentState{
-                .module = shader,
-                .entry_point = "frag_main",
-                .target_count = color_targets.len,
-                .targets = &color_targets,
-            },
-        };
-        break :pipeline gctx.createRenderPipeline(pipeline_layout, pipeline_descriptor);
-    };
+        gpu.bufferEntry(1, .{ .vertex = true }, .read_only_storage, true, 0),
+    }, .shader_source = shader_render_src });
+    self.* = .{ .pipeline = pipeline };
 }
 
 pub fn draw(self: *@This(), renderer: *Renderer) void {
-    const gctx = renderer.gctx;
-    const pipeline = gctx.lookupResource(self.pipeline_handle.?) orelse unreachable;
-    const bind_group = gctx.lookupResource(self.bind_group_handle.?) orelse unreachable;
+    if (self.instance) |instance| {
+        // Render
+        var pass = Renderer.RenderPass.begin_draw_pass(renderer);
+        const xform = math.matMult(&.{ pass.base_transform, math.Mat.scale(math.Vec3.init(1.0, 5.0, 1.0)) });
+        Renderer.Instance.set_uniform(renderer, instance, 0, Uniform, Uniform{ .size = self.terrain_size, .xform = xform });
+        pass.setInstance(renderer, instance);
+        pass.draw(6 * self.terrain_size * self.terrain_size, 1, 0, 0);
+        pass.end();
+    }
+}
 
-    var pass = renderer.begin_pass(.{});
-
-    const alloc = gctx.uniformsAllocate(Uniform, 1);
-    const xform = math.matMult(&.{ renderer.current_xform, math.Mat.scale(math.Vec3.init(1.0, 5.0, 1.0)) });
-
-    alloc.slice[0].size = self.terrain_size;
-    alloc.slice[0].xform = xform;
-
-    pass.setPipeline(pipeline);
-    pass.setBindGroup(0, bind_group, &.{alloc.offset});
-    pass.draw(6 * self.terrain_size * self.terrain_size, 1, 0, 0);
-
-    pass.end();
-    pass.release();
+pub fn deinit(self: *@This(), renderer: *Renderer, app: *App) void {
+    if (self.instance) |instance| {
+        Renderer.Instance.destroy(renderer, app, instance);
+    }
+    Renderer.Pipeline.destroy(renderer, self.pipeline);
 }

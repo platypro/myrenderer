@@ -15,6 +15,7 @@ pub fn main() !void {
     const allocator = gpa.allocator();
     var mods: Modules = undefined;
     try mods.init(allocator);
+    defer mods.deinit(allocator);
 
     const app = mods.get(.app);
     app.run(.main);
