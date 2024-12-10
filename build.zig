@@ -54,14 +54,12 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-
     exe.root_module.addImport("zigimg", zigimg_dependency.module("zigimg"));
 
     const mach_dep = b.dependency("mach", .{
         .target = target,
         .optimize = optimize,
     });
-
     exe.root_module.addImport("mach", mach_dep.module("mach"));
 
     b.installFile("src/HEIGHTMAP.png", "bin/HEIGHTMAP.png");

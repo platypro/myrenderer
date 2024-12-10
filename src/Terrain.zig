@@ -9,6 +9,8 @@ const mach = @import("mach");
 pub const mach_module = .terrain;
 pub const mach_systems = .{ .init, .draw, .deinit };
 
+const Terrain = @This();
+
 // Shader inputs:
 //    vertex_index (u32)      - The current vertex ID
 //    heightmap (array<f32>) - The heightmap data
@@ -130,23 +132,25 @@ pub fn load_terrain(self: *@This(), renderer: *Renderer, app: *App, filename: []
     Renderer.Instance.set_storage_buffer(renderer, self.instance.?, 1, self.terrain_handle.?, image_buf_size, 0);
 }
 
-pub fn init(self: *@This(), renderer: *Renderer) !void {
-    const pipeline = try Renderer.Pipeline.create(renderer, .{ .buffers = &.{
-        gpu.bufferEntry(0, .{ .vertex = true }, .uniform, true, 0),
-        gpu.bufferEntry(1, .{ .vertex = true }, .read_only_storage, true, 0),
-    }, .shader_source = shader_render_src });
+pub fn init(self: *Terrain, terrain_mod: mach.Mod(Terrain), renderer: *Renderer) !void {
+    const pipeline = try Renderer.Pipeline.create(renderer, .{
+        .buffers = &.{
+            gpu.bufferEntry(0, .{ .vertex = true }, .uniform, true, 0),
+            gpu.bufferEntry(1, .{ .vertex = true }, .read_only_storage, true, 0),
+        },
+        .shader_source = shader_render_src,
+        .vtable = .{ .draw = terrain_mod.id.draw },
+    });
     self.* = .{ .pipeline = pipeline };
 }
 
-pub fn draw(self: *@This(), renderer: *Renderer) void {
+pub fn draw(self: *Terrain, renderer: *Renderer) void {
     if (self.instance) |instance| {
         // Render
-        var pass = Renderer.RenderPass.begin_draw_pass(renderer);
-        const xform = math.matMult(&.{ pass.base_transform, math.Mat.scale(math.Vec3.init(1.0, 5.0, 1.0)) });
+        const xform = math.matMult(&.{ renderer.current_render_pass.base_transform, math.Mat.scale(math.Vec3.init(1.0, 5.0, 1.0)) });
         Renderer.Instance.set_uniform(renderer, instance, 0, Uniform, Uniform{ .size = self.terrain_size, .xform = xform });
-        pass.setInstance(renderer, instance);
-        pass.draw(6 * self.terrain_size * self.terrain_size, 1, 0, 0);
-        pass.end();
+        renderer.current_render_pass.setInstance(renderer, instance);
+        renderer.current_render_pass.draw(6 * self.terrain_size * self.terrain_size, 1, 0, 0);
     }
 }
 

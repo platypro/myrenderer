@@ -2,6 +2,7 @@ const std = @import("std");
 const glfw = @import("zglfw");
 const gpu = @import("zgpu");
 const mach = @import("mach");
+const ztracy = @import("ztracy");
 
 const Renderer = @import("Renderer.zig");
 const Terrain = @import("Terrain.zig");
@@ -25,6 +26,7 @@ pub fn main(
 
     try glfw.init();
     defer glfw.terminate();
+    glfw.swapInterval(1);
 
     app.window = try glfw.Window.create(600, 600, "Platypro's Thing", null);
     defer app.window.destroy();
@@ -35,11 +37,7 @@ pub fn main(
 
     while (!app.window.shouldClose()) {
         glfw.pollEvents();
-
-        renderer_mod.call(.render_begin);
-        terrain_mod.call(.draw);
-        renderer_mod.call(.render_end);
-
+        renderer_mod.call(.draw);
         _ = renderer.gctx.present();
         app.window.swapBuffers();
     }

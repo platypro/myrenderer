@@ -5,28 +5,40 @@ const std = @import("std");
 const math = @import("math.zig");
 
 pub const mach_module = .renderer;
-pub const mach_systems = .{ .init, .render_begin, .render_end, .deinit };
+pub const mach_systems = .{ .init, .draw, .generate_shadow_maps, .deinit };
 
 const App = @import("App.zig");
 
-const shadow_map_segments = 3;
-const shadow_map_resolutions = .{ 512, 256, 128 };
+const ShadowMapSegment = struct {
+    resolution: u32,
+    cutoff: f32,
+};
+
+const shadow_map_segments: []ShadowMapSegment = &.{
+    .{ .resolution = 512, .cutoff = 0.4 },
+    .{ .resolution = 128, .cutoff = 0.7 },
+    .{ .resolution = 64, .cutoff = 1.0 },
+};
+const shadow_map_count = shadow_map_segments.len;
 
 const Renderer = @This();
 
+const Color = struct {
+    r: u8,
+    g: u8,
+    b: u8,
+    a: u8,
+};
+
+current_render_pass: RenderPass,
 camera_location: math.Vec3,
 current_xform: math.Mat,
 encoder: gpu.wgpu.CommandEncoder,
 back_buffer_view: gpu.wgpu.TextureView,
 depth_texture_view: gpu.wgpu.TextureView,
 gctx: *gpu.GraphicsContext,
-shadow_map: gpu.BufferHandle,
 
-light_sources: mach.Objects(.{}, struct {
-    position: math.Vec3,
-    shadow_maps: [shadow_map_segments]gpu.BufferHandle,
-}),
-
+point_light_sources: mach.Objects(.{}, PointLight),
 pipelines: mach.Objects(.{}, Pipeline),
 instances: mach.Objects(.{}, Instance),
 
@@ -62,10 +74,6 @@ pub fn init(self: *@This(), app: *App) !void {
     });
     const depth_texture_view_handle = self.gctx.createTextureView(depth_texture_handle, .{});
     self.depth_texture_view = self.gctx.lookupResource(depth_texture_view_handle).?;
-
-    self.light_sources.lock();
-    defer self.light_sources.unlock();
-    //    _ = try self.light_sources.new(.{ .position = math.Vec3.init(1.0, 8.0, 1.0) });
 }
 
 pub fn render_begin(self: *@This()) !void {
@@ -96,6 +104,30 @@ pub fn render_end(self: *@This()) !void {
     self.back_buffer_view.release();
 }
 
+pub fn draw(renderer: *Renderer, renderer_mod: mach.Mod(Renderer)) !void {
+    try render_begin(renderer);
+
+    renderer.current_render_pass = RenderPass.begin_draw_pass(renderer);
+    var instance_iter = renderer.instances.slice();
+    while (instance_iter.next()) |instance_id| {
+        Instance.draw(renderer, instance_id, renderer_mod);
+    }
+    renderer.current_render_pass.end();
+
+    try render_end(renderer);
+}
+
+pub fn generate_shadow_maps(renderer: *Renderer) void {
+    renderer.point_light_sources.lock();
+    defer renderer.point_light_sources.unlock();
+    // var light_iter = renderer.point_light_sources.slice();
+    // while (light_iter.next()) |light_id| {
+    //     const light = light_iter.get(light_id);
+    //     var pass = RenderPass.begin_shadow_map_generation_pass(renderer, light);
+    //     pass.end();
+    // }
+}
+
 pub fn deinit(self: *@This(), app: *App) void {
     self.gctx.destroy(app.allocator);
 }
@@ -105,15 +137,53 @@ const PassType = enum {
     shadow_map,
 };
 
+pub const PointLight = struct {
+    transform: math.Mat,
+    color: Color,
+    shadow_map: ?gpu.TextureHandle = null,
+
+    const shadow_map_size = 128;
+
+    pub fn create(renderer: *Renderer, base: PointLight) !mach.ObjectID {
+        const light_id = renderer.light_sources.new(base);
+
+        const descriptor = gpu.wgpu.TextureDescriptor{
+            .usage = .{ .render_attachment = true, .texture_binding = true },
+            .dimension = .tdim_2d,
+            .format = .depth32_float,
+            .size = .{
+                .height = shadow_map_size,
+                .width = shadow_map_size,
+                .depth_or_array_layers = 6,
+            },
+        };
+        renderer.light_sources.set(light_id, .shadow_maps, renderer.gctx.createTexture(descriptor));
+    }
+
+    pub fn destroy(renderer: *Renderer, light_id: mach.ObjectID) void {
+        const shadow_map = renderer.light_sources.get(light_id, .shadow_maps);
+        const buffer = renderer.gctx.lookupResource(shadow_map.?);
+        buffer.?.release();
+
+        renderer.light_sources.delete(light_id);
+    }
+};
+
 pub const Pipeline = struct {
     pipeline_handle: gpu.RenderPipelineHandle,
     bind_group_layout_handle: gpu.BindGroupLayoutHandle,
     num_bindings: u32 = 0,
     num_dynamic_bindings: u32 = 0,
+    vtable: VTable,
+
+    const VTable = struct {
+        draw: ?mach.FunctionID = null,
+    };
 
     const Options = struct {
         shader_source: [*:0]const u8,
         buffers: []const gpu.wgpu.BindGroupLayoutEntry,
+        vtable: VTable,
     };
 
     pub fn create(renderer: *Renderer, options: Options) !mach.ObjectID {
@@ -155,6 +225,7 @@ pub const Pipeline = struct {
             .pipeline_handle = renderer.gctx.createRenderPipeline(pipeline_layout, pipeline_descriptor),
             .num_bindings = @intCast(options.buffers.len),
             .bind_group_layout_handle = bind_group_layout_handle,
+            .vtable = options.vtable,
         };
 
         renderer.pipelines.lock();
@@ -243,6 +314,12 @@ pub const Instance = struct {
         return renderer.instances.get(instance_id, .bind_group_handle).?;
     }
 
+    pub fn draw(renderer: *Renderer, instance_id: mach.ObjectID, renderer_mod: mach.Mod(Renderer)) void {
+        const pipeline_id = renderer.instances.get(instance_id, .pipeline);
+        const vtable = renderer.pipelines.get(pipeline_id, .vtable);
+        renderer_mod.run(vtable.draw.?);
+    }
+
     pub fn destroy(renderer: *Renderer, app: *App, instance_id: mach.ObjectID) void {
         app.allocator.free(renderer.instances.get(instance_id, .bind_group_descriptors));
         app.allocator.free(renderer.instances.get(instance_id, .dynamic_offsets));
@@ -297,4 +374,9 @@ pub const RenderPass = struct {
             .base_transform = self.current_xform,
         };
     }
+
+    // pub fn begin_shadow_map_generation_pass(self: *Renderer, light: PointLight) RenderPass {
+    //     _ = self;
+    //     _ = light;
+    // }
 };
