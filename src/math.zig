@@ -5,16 +5,15 @@ pub const Mat = mach.Mat4x4;
 pub const Vec3 = mach.Vec3;
 pub const Vec4 = mach.Vec4;
 
-pub fn lookAt(camera_: Vec3, target: Vec3, up_ref: Vec3) Mat {
-    const camera = camera_.mulScalar(-1);
+pub fn lookAt(camera: Vec3, target: Vec3, up_ref: Vec3) Mat {
     const forward = target.sub(&camera).normalize(0.0);
-    const up = up_ref.cross(&forward).normalize(0.0);
-    const right = forward.cross(&up).normalize(0.0);
+    const right = up_ref.cross(&forward).normalize(0.0);
+    const up = forward.cross(&right).normalize(0.0);
 
     return Mat.init(
-        &Vec4.init(right.v[0], right.v[1], right.v[2], -camera.dot(&right)),
-        &Vec4.init(up.v[0], up.v[1], up.v[2], -camera.dot(&up)),
-        &Vec4.init(forward.v[0], forward.v[1], forward.v[2], -camera.dot(&forward)),
+        &Vec4.init(right.v[0], right.v[1], right.v[2], -right.dot(&camera)),
+        &Vec4.init(up.v[0], up.v[1], up.v[2], -up.dot(&camera)),
+        &Vec4.init(-forward.v[0], -forward.v[1], -forward.v[2], -forward.dot(&camera)),
         &Vec4.init(0.0, 0.0, 0.0, 1.0),
     );
 }

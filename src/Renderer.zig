@@ -89,7 +89,7 @@ pub fn render_begin(self: *@This()) !void {
     );
     var perspective = math.Mat.projection2D(.{ .left = -1.0, .right = 1.0, .top = 1.0, .bottom = -1.0, .near = 0.1, .far = 100.0 });
     perspective.v[2].v[3] = 1;
-    self.current_xform = math.matMult(&.{ math.Mat.rotateZ(-math.std.pi / 2.0), perspective, view });
+    self.current_xform = math.matMult(&.{ math.Mat.rotateZ(-math.std.pi), perspective, view });
 
     self.back_buffer_view = self.gctx.swapchain.getCurrentTextureView();
     self.encoder = self.gctx.device.createCommandEncoder(null);
