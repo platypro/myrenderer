@@ -117,7 +117,7 @@ pub fn load_terrain(self: *@This(), renderer: *Renderer, app: *App, filename: []
         const copy_amnt = if (counter + COPY_SIZE >= image.pixels.grayscale16.len) image.pixels.grayscale16.len - counter else COPY_SIZE;
         var converted_bytes: [COPY_SIZE]f32 = undefined;
         for (0..copy_amnt, counter..(counter + copy_amnt)) |i, sub| {
-            converted_bytes[i] = @as(f32, @floatFromInt(image.pixels.grayscale16[sub].value)) / @as(f32, 65535.0);
+            converted_bytes[i] = 1.0 - @as(f32, @floatFromInt(image.pixels.grayscale16[sub].value)) / @as(f32, 65535.0);
         }
 
         renderer.gctx.queue.writeBuffer(image_buf, counter * 4, f32, converted_bytes[0..copy_amnt]);

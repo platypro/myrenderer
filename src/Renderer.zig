@@ -77,19 +77,20 @@ pub fn init(self: *@This(), app: *App) !void {
 }
 
 pub fn render_begin(self: *@This()) !void {
-    const camX = math.std.cos(@as(f32, @floatCast(glfw.getTime()))) * 20.0;
-    const camZ = math.std.sin(@as(f32, @floatCast(glfw.getTime()))) * 20.0;
+    const camX = math.std.cos(@as(f32, @floatCast(glfw.getTime() / 2.0))) * 10.0;
+    const camZ = math.std.sin(@as(f32, @floatCast(glfw.getTime() / 2.0))) * 10.0;
 
-    self.camera_location = math.Vec3.init(camX, 15.0, camZ);
+    self.camera_location = math.Vec3.init(camX, 10.0, camZ);
 
     const view = math.lookAt(
         self.camera_location,
         math.Vec3.init(0.0, 0.0, 0.0),
         math.Vec3.init(0.0, 1.0, 0.0),
     );
-    var perspective = math.Mat.projection2D(.{ .left = -1.0, .right = 1.0, .top = 1.0, .bottom = -1.0, .near = 0.1, .far = 100.0 });
-    perspective.v[2].v[3] = 1;
-    self.current_xform = math.matMult(&.{ math.Mat.rotateZ(-math.std.pi), perspective, view });
+
+    const perspective = math.perspective(math.std.degreesToRadians(120.0), 1.0, 0.1, 100.0);
+
+    self.current_xform = math.matMult(&.{ perspective, view });
 
     self.back_buffer_view = self.gctx.swapchain.getCurrentTextureView();
     self.encoder = self.gctx.device.createCommandEncoder(null);
@@ -212,7 +213,7 @@ pub const Pipeline = struct {
             .depth_stencil = &.{
                 .format = .depth32_float,
                 .depth_write_enabled = true,
-                .depth_compare = .greater,
+                .depth_compare = .less,
             },
             .fragment = &gpu.wgpu.FragmentState{
                 .module = shader,
@@ -362,7 +363,7 @@ pub const RenderPass = struct {
             .view = self.depth_texture_view,
             .depth_load_op = .clear,
             .depth_store_op = .store,
-            .depth_clear_value = 0.0,
+            .depth_clear_value = 1.0,
         };
 
         return RenderPass{

@@ -13,8 +13,19 @@ pub fn lookAt(camera: Vec3, target: Vec3, up_ref: Vec3) Mat {
     return Mat.init(
         &Vec4.init(right.v[0], right.v[1], right.v[2], -right.dot(&camera)),
         &Vec4.init(up.v[0], up.v[1], up.v[2], -up.dot(&camera)),
-        &Vec4.init(-forward.v[0], -forward.v[1], -forward.v[2], -forward.dot(&camera)),
+        &Vec4.init(forward.v[0], forward.v[1], forward.v[2], -forward.dot(&camera)),
         &Vec4.init(0.0, 0.0, 0.0, 1.0),
+    );
+}
+
+pub fn perspective(fovy: f32, aspect: f32, near: f32, far: f32) Mat {
+    const halftan = std.tan(fovy / 2.0);
+
+    return Mat.init(
+        &Vec4.init(1.0 / (aspect * halftan), 0.0, 0.0, 0.0),
+        &Vec4.init(0.0, 1.0 / halftan, 0.0, 0.0),
+        &Vec4.init(0.0, 0.0, far / (far - near), -far * near / (far - near)),
+        &Vec4.init(0.0, 0.0, 1.0, 0.0),
     );
 }
 
