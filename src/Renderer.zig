@@ -357,6 +357,7 @@ pub const RenderPass = struct {
             .view = self.back_buffer_view,
             .load_op = .clear,
             .store_op = .store,
+            .clear_value = .{ .r = 0.4, .g = 0.4, .b = 0.4, .a = 0.4 },
         }};
 
         const depth_attachment = gpu.wgpu.RenderPassDepthStencilAttachment{
