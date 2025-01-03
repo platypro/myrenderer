@@ -1,49 +1,61 @@
 const std = @import("std");
-const glfw = @import("zglfw");
-const gpu = @import("zgpu");
 const mach = @import("mach");
-const ztracy = @import("ztracy");
 
 const Renderer = @import("Renderer.zig");
 const Terrain = @import("Terrain.zig");
+pub const Mod = mach.Mod(@This());
 
 pub const mach_module = .app;
-pub const mach_systems = .{.main};
+pub const mach_systems = .{ .main, .init, .tick, .deinit };
 
-gpa: std.heap.GeneralPurposeAllocator(.{}) = .{},
-allocator: std.mem.Allocator,
-window: *glfw.Window,
+is_initialized: bool,
+terrain: mach.ObjectID,
 
-pub fn main(
+pub const main = mach.schedule(.{
+    .{ mach.Core, .init },
+    .{ Renderer, .preinit },
+    .{ @This(), .init },
+    .{ mach.Core, .main },
+});
+
+pub fn init(
     app: *@This(),
-    renderer_mod: mach.Mod(Renderer),
+    app_mod: Mod,
+    core: *mach.Core,
+) !void {
+    core.on_tick = app_mod.id.tick;
+    core.on_exit = app_mod.id.deinit;
+
+    app.is_initialized = false;
+}
+
+pub fn tick(
+    app: *@This(),
+    core: *mach.Core,
     renderer: *Renderer,
-    terrain_mod: mach.Mod(Terrain),
+    renderer_mod: Renderer.Mod,
+    terrain_mod: Terrain.Mod,
     terrain: *Terrain,
 ) !void {
-    app.gpa = .{};
-    app.allocator = app.gpa.allocator();
-
-    try glfw.init();
-    defer glfw.terminate();
-    glfw.swapInterval(1);
-
-    app.window = try glfw.Window.create(600, 600, "Platypro's Thing", null);
-    defer app.window.destroy();
-
-    renderer_mod.call(.init);
-    terrain_mod.call(.init);
-    try terrain.load_terrain(renderer, app, "HEIGHTMAP.png");
-
-    while (!app.window.shouldClose()) {
-        glfw.pollEvents();
-        renderer_mod.call(.draw);
-        _ = renderer.gctx.present();
-        app.window.swapBuffers();
+    while (core.nextEvent()) |event| {
+        switch (event) {
+            .window_open => {
+                app.is_initialized = true;
+                renderer_mod.call(.init);
+                terrain_mod.call(.init);
+                app.terrain = try terrain.create_terrain(renderer, core, "HEIGHTMAP.png");
+            },
+            .close => core.exit(),
+            else => {},
+        }
     }
+    if (app.is_initialized) {
+        terrain_mod.call(.tick);
+        renderer_mod.call(.draw);
+    }
+}
 
+pub fn deinit(renderer_mod: Renderer.Mod, terrain_mod: Terrain.Mod) void {
     terrain_mod.call(.deinit);
     renderer_mod.call(.deinit);
-
-    _ = app.gpa.detectLeaks();
 }

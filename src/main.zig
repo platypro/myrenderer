@@ -5,6 +5,7 @@ const img = @import("zigimg");
 const mach = @import("mach");
 
 const Modules = mach.Modules(.{
+    mach.Core,
     @import("App.zig"),
     @import("Renderer.zig"),
     @import("Terrain.zig"),

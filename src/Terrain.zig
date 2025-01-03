@@ -1,4 +1,3 @@
-const gpu = @import("zgpu");
 const std = @import("std");
 const img = @import("zigimg");
 const Renderer = @import("Renderer.zig");
@@ -7,9 +6,10 @@ const math = @import("math.zig");
 const mach = @import("mach");
 
 pub const mach_module = .terrain;
-pub const mach_systems = .{ .init, .draw, .deinit };
+pub const mach_systems = .{ .init, .tick, .deinit };
 
 const Terrain = @This();
+pub const Mod = mach.Mod(@This());
 
 // Shader inputs:
 //    vertex_index (u32)      - The current vertex ID
@@ -52,9 +52,11 @@ const shader_render_src =
     \\@group(0) @binding(0) var<uniform> data: UniformStruct;
     \\@group(0) @binding(1) var<storage,read> heightmap: array<f32>;
     \\
+    \\@group(1) @binding(0) var<uniform> world_xform: mat4x4<f32>;
+    \\
     \\struct UniformStruct {
-    \\    size: u32,
     \\    xform: mat4x4<f32>,
+    \\    size: u32,
     \\}
     \\
     \\struct FragPass {
@@ -67,49 +69,37 @@ const shader_render_src =
     \\) -> FragPass {
 ++ shader_genvertices_src ++
     \\    var out: FragPass;
-    \\    out.pos = data.xform * vertex_out;
+    \\    out.pos = world_xform * data.xform * vertex_out;
     \\    out.color = vec4(vertex_out.y, vertex_out.y, vertex_out.y, 1.0);
     \\
     \\    return out;
     \\}
     \\
-    \\@fragment fn frag_main(input: FragPass) -> @location(0) vec4<f32> {
-    \\    return input.color;
-    \\}
 ;
 
 const Uniform = extern struct {
-    size: u32,
-    padding1: u32 = 0,
-    padding2: u32 = 0,
-    padding3: u32 = 0,
     xform: math.Mat,
+    size: u32,
 };
 
 pipeline: mach.ObjectID,
-instance: ?mach.ObjectID = null,
-terrain_handle: ?gpu.BufferHandle = null,
-terrain_size: u32 = 0,
 
-pub fn load_terrain(self: *@This(), renderer: *Renderer, app: *App, filename: []const u8) !void {
+pub fn create_terrain(self: *@This(), renderer: *Renderer, core: *mach.Core, filename: []const u8) !mach.ObjectID {
     const image_file = try std.fs.cwd().openFile(filename, .{});
     defer image_file.close();
     var stream_source = std.io.StreamSource{ .file = image_file };
-    var image = try img.png.load(&stream_source, app.allocator, .{ .temp_allocator = app.allocator });
-    defer image.deinit(app.allocator);
+    var image = try img.png.load(&stream_source, core.allocator, .{ .temp_allocator = core.allocator });
+    defer image.deinit(core.allocator);
 
-    self.terrain_size = @intCast(image.width);
-    const image_buf_size = self.terrain_size * self.terrain_size * 4;
+    const terrain_size: u32 = @intCast(image.width);
+    const image_buf_size = terrain_size * terrain_size * 4;
 
-    if (self.terrain_handle) |handle| {
-        if (renderer.gctx.lookupResource(handle)) |buf| {
-            buf.release();
-            self.terrain_handle = null;
-        }
-    }
+    const bindings = [_]Renderer.Pipeline.Binding{
+        .{ .location = 0, .size = @sizeOf(Uniform) },
+        .{ .location = 1, .size = image_buf_size },
+    };
 
-    self.terrain_handle = renderer.gctx.createBuffer(.{ .mapped_at_creation = false, .size = image_buf_size, .usage = .{ .copy_dst = true, .storage = true } });
-    const image_buf = renderer.gctx.lookupResource(self.terrain_handle.?) orelse unreachable;
+    const result = try Renderer.Pipeline.spawn_instance(renderer, self.pipeline, core, &bindings);
 
     const COPY_SIZE = 64;
     var counter: u32 = 0;
@@ -119,44 +109,42 @@ pub fn load_terrain(self: *@This(), renderer: *Renderer, app: *App, filename: []
         for (0..copy_amnt, counter..(counter + copy_amnt)) |i, sub| {
             converted_bytes[i] = 1.0 - @as(f32, @floatFromInt(image.pixels.grayscale16[sub].value)) / @as(f32, 65535.0);
         }
-
-        renderer.gctx.queue.writeBuffer(image_buf, counter * 4, f32, converted_bytes[0..copy_amnt]);
+        Renderer.Renderable.update_buffer(renderer, core, result, 1, counter * 4, f32, converted_bytes[0..copy_amnt]);
         counter += COPY_SIZE;
     }
 
-    if (self.instance) |instance_handle| {
-        Renderer.Instance.destroy(renderer, app, instance_handle);
-    }
-
-    self.instance = try Renderer.Pipeline.spawn_instance(renderer, self.pipeline, app);
-    Renderer.Instance.set_storage_buffer(renderer, self.instance.?, 1, self.terrain_handle.?, image_buf_size, 0);
+    Renderer.Renderable.update_draw_index(renderer, result, .{ .first_instance = 0, .first_vertex = 0, .instance_count = 1, .vertex_count = terrain_size * terrain_size * 6 });
+    Renderer.Renderable.update_buffer(renderer, core, result, 0, 0, Uniform, &.{Uniform{ .size = terrain_size, .xform = math.Mat.ident }});
+    return result;
 }
 
-pub fn init(self: *Terrain, terrain_mod: mach.Mod(Terrain), renderer: *Renderer) !void {
-    const pipeline = try Renderer.Pipeline.create(renderer, .{
-        .buffers = &.{
-            gpu.bufferEntry(0, .{ .vertex = true }, .uniform, true, 0),
-            gpu.bufferEntry(1, .{ .vertex = true }, .read_only_storage, true, 0),
+pub fn init(self: *Terrain, renderer: *Renderer, core: *mach.Core) !void {
+    const pipeline = try Renderer.Pipeline.create(renderer, core, .{
+        .bindings = &.{
+            .{
+                .location = 0,
+                .type = .uniform,
+                .management = .managed_single,
+            },
+            .{
+                .location = 1,
+                .type = .read_only_storage,
+                .management = .managed_single,
+            },
         },
-        .shader_source = shader_render_src,
-        .vtable = .{ .draw = terrain_mod.id.draw },
+        .vertex_source = shader_render_src,
     });
-    self.* = .{ .pipeline = pipeline };
+    self.pipeline = pipeline;
 }
 
-pub fn draw(self: *Terrain, renderer: *Renderer) void {
-    if (self.instance) |instance| {
+pub fn tick(self: *Terrain, renderer: *Renderer, core: *mach.Core) !void {
+    const instances = try renderer.pipelines.getChildren(self.pipeline);
+    for (instances.items) |instance| {
         // Render
-        const xform = math.matMult(&.{ renderer.current_render_pass.base_transform, math.Mat.scale(math.Vec3.init(1.0, 5.0, 1.0)) });
-        Renderer.Instance.set_uniform(renderer, instance, 0, Uniform, Uniform{ .size = self.terrain_size, .xform = xform });
-        renderer.current_render_pass.setInstance(renderer, instance);
-        renderer.current_render_pass.draw(6 * self.terrain_size * self.terrain_size, 1, 0, 0);
+        Renderer.Renderable.update_buffer(renderer, core, instance, 0, 0, math.Mat, &.{math.Mat.scale(math.Vec3.init(1.0, 5.0, 1.0))});
     }
 }
 
-pub fn deinit(self: *@This(), renderer: *Renderer, app: *App) void {
-    if (self.instance) |instance| {
-        Renderer.Instance.destroy(renderer, app, instance);
-    }
-    Renderer.Pipeline.destroy(renderer, self.pipeline);
+pub fn deinit(self: *@This(), renderer: *Renderer, core: *mach.Core) void {
+    Renderer.Pipeline.destroy(renderer, core, self.pipeline);
 }

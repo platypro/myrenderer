@@ -40,16 +40,6 @@ pub fn build(b: *std.Build) void {
     // files, this ensures they will be present and in the expected location.
     run_cmd.step.dependOn(b.getInstallStep());
 
-    @import("zgpu").addLibraryPathsTo(exe);
-
-    const zgpu = b.dependency("zgpu", .{});
-    exe.root_module.addImport("zgpu", zgpu.module("root"));
-    exe.linkLibrary(zgpu.artifact("zdawn"));
-
-    const zglfw = b.dependency("zglfw", .{});
-    exe.root_module.addImport("zglfw", zglfw.module("root"));
-    exe.linkLibrary(zglfw.artifact("glfw"));
-
     const zigimg_dependency = b.dependency("zigimg", .{
         .target = target,
         .optimize = optimize,
