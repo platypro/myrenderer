@@ -9,6 +9,7 @@ const Modules = mach.Modules(.{
     @import("App.zig"),
     @import("Renderer.zig"),
     @import("Terrain.zig"),
+    @import("Polygon.zig"),
 });
 
 pub fn main() !void {

@@ -99,7 +99,7 @@ pub fn create_terrain(self: *@This(), renderer: *Renderer, core: *mach.Core, fil
         .{ .location = 1, .size = image_buf_size },
     };
 
-    const result = try Renderer.Pipeline.spawn_instance(renderer, self.pipeline, core, &bindings);
+    const result = try Renderer.Pipeline.spawn_instance(renderer, self.pipeline, &bindings);
 
     const COPY_SIZE = 64;
     var counter: u32 = 0;
@@ -109,17 +109,17 @@ pub fn create_terrain(self: *@This(), renderer: *Renderer, core: *mach.Core, fil
         for (0..copy_amnt, counter..(counter + copy_amnt)) |i, sub| {
             converted_bytes[i] = 1.0 - @as(f32, @floatFromInt(image.pixels.grayscale16[sub].value)) / @as(f32, 65535.0);
         }
-        Renderer.Renderable.update_buffer(renderer, core, result, 1, counter * 4, f32, converted_bytes[0..copy_amnt]);
+        Renderer.Instance.update_buffer(renderer, result, 1, counter * 4, f32, converted_bytes[0..copy_amnt]);
         counter += COPY_SIZE;
     }
 
-    Renderer.Renderable.update_draw_index(renderer, result, .{ .first_instance = 0, .first_vertex = 0, .instance_count = 1, .vertex_count = terrain_size * terrain_size * 6 });
-    Renderer.Renderable.update_buffer(renderer, core, result, 0, 0, Uniform, &.{Uniform{ .size = terrain_size, .xform = math.Mat.ident }});
+    Renderer.Instance.set_vertex_buffer(renderer, result, .{ .first_instance = 0, .first_vertex = 0, .instance_count = 1, .vertex_count = terrain_size * terrain_size * 6 });
+    Renderer.Instance.update_buffer(renderer, result, 0, 0, Uniform, &.{Uniform{ .size = terrain_size, .xform = math.Mat.ident }});
     return result;
 }
 
-pub fn init(self: *Terrain, renderer: *Renderer, core: *mach.Core) !void {
-    const pipeline = try Renderer.Pipeline.create(renderer, core, .{
+pub fn init(self: *Terrain, renderer: *Renderer) !void {
+    const pipeline = try Renderer.Pipeline.create(renderer, .{
         .bindings = &.{
             .{
                 .location = 0,
@@ -137,14 +137,14 @@ pub fn init(self: *Terrain, renderer: *Renderer, core: *mach.Core) !void {
     self.pipeline = pipeline;
 }
 
-pub fn tick(self: *Terrain, renderer: *Renderer, core: *mach.Core) !void {
+pub fn tick(self: *Terrain, renderer: *Renderer) !void {
     const instances = try renderer.pipelines.getChildren(self.pipeline);
     for (instances.items) |instance| {
         // Render
-        Renderer.Renderable.update_buffer(renderer, core, instance, 0, 0, math.Mat, &.{math.Mat.scale(math.Vec3.init(1.0, 5.0, 1.0))});
+        Renderer.Instance.update_buffer(renderer, instance, 0, 0, math.Mat, &.{math.Mat.scale(math.Vec3.init(1.0, 5.0, 1.0))});
     }
 }
 
-pub fn deinit(self: *@This(), renderer: *Renderer, core: *mach.Core) void {
-    Renderer.Pipeline.destroy(renderer, core, self.pipeline);
+pub fn deinit(self: *@This(), renderer: *Renderer) void {
+    Renderer.Pipeline.destroy(renderer, self.pipeline);
 }

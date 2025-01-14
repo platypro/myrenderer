@@ -2,6 +2,7 @@ pub const mach = @import("mach").math;
 pub const std = @import("std").math;
 
 pub const Mat = mach.Mat4x4;
+pub const Vec2 = mach.Vec2;
 pub const Vec3 = mach.Vec3;
 pub const Vec4 = mach.Vec4;
 
