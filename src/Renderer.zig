@@ -110,20 +110,21 @@ pub fn draw(renderer: *Renderer) !void {
     const queue: *mach.gpu.Queue = renderer.core.windows.get(renderer.current_window, .queue);
     const swap_chain: *mach.gpu.SwapChain = renderer.core.windows.get(renderer.current_window, .swap_chain);
 
-    const camX = math.std.cos(@as(f32, @floatCast(renderer.elapsed_time / 2.0))) * 10.0;
-    const camZ = math.std.sin(@as(f32, @floatCast(renderer.elapsed_time / 2.0))) * 10.0;
+    // const camX = math.std.cos(@as(f32, @floatCast(renderer.elapsed_time / 2.0))) * 10.0;
+    // const camZ = math.std.sin(@as(f32, @floatCast(renderer.elapsed_time / 2.0))) * 10.0;
 
     renderer.elapsed_time += renderer.delta_time;
 
-    renderer.camera_location = math.Vec3.init(camX, 10.0, camZ);
+    // renderer.camera_location = math.Vec3.init(camX, 10.0, camZ);
 
-    const view = math.lookAt(
-        renderer.camera_location,
-        math.Vec3.init(0.0, 0.0, 0.0),
-        math.Vec3.init(0.0, 1.0, 0.0),
-    );
+    // const view = math.lookAt(
+    //     renderer.camera_location,
+    //     math.Vec3.init(0.0, 0.0, 0.0),
+    //     math.Vec3.init(0.0, 1.0, 0.0),
+    // );
+    const view = math.Mat.ident;
 
-    const perspective = math.perspective(math.std.degreesToRadians(120.0), 1.0, 0.1, 100.0);
+    const perspective = math.Mat.projection2D(.{ .left = 0, .right = 200, .top = 0, .bottom = 200, .near = 0.1, .far = 100 }); //math.perspective(math.std.degreesToRadians(120.0), 1.0, 0.1, 100.0);
 
     queue.writeBuffer(renderer.shared_buffer, renderer.current_buffer_slot * @sizeOf(math.Mat), @as([]const math.Mat, &.{math.matMult(&.{ perspective, view })}));
 
@@ -306,7 +307,7 @@ pub const Pipeline = struct {
             },
             .primitive = mach.gpu.PrimitiveState{
                 .front_face = .cw,
-                .cull_mode = .front,
+                .cull_mode = .back,
                 .topology = .triangle_list,
             },
             .depth_stencil = &.{
@@ -450,16 +451,14 @@ pub const VertexBuffer = struct {
     first_vertex: u32 = 0,
     first_instance: u32 = 0,
 
-    pub fn alloc(renderer: *Renderer, offset: u32, primitive_count: u32, T: type, value: ?[]const T) VertexBuffer {
-        if (value) |val| {
+    pub fn new(renderer: *Renderer, offset: u32, primitive_count: u32, T: type) VertexBuffer {
+        if (T != void) {
             const device: *mach.gpu.Device = renderer.core.windows.get(renderer.current_window, .device);
-            const queue: *mach.gpu.Queue = renderer.core.windows.get(renderer.current_window, .queue);
             const buf = device.createBuffer(&mach.gpu.Buffer.Descriptor{
                 .mapped_at_creation = .true,
                 .size = primitive_count * @sizeOf(T) * 3,
-                .usage = .{ .copy_dst = true, .vertex = true },
+                .usage = .{ .copy_dst = true, .map_write = true, .vertex = true },
             });
-            queue.writeBuffer(buf, offset * 3 * @sizeOf(T), val);
 
             return VertexBuffer{
                 .vertex_count = primitive_count * 3,
@@ -472,6 +471,10 @@ pub const VertexBuffer = struct {
                 .first_vertex = offset * 3,
             };
         }
+    }
+
+    pub fn map(self: *@This(), T: type) ?[]T {
+        return self.vertex_buffer.?.getMappedRange(T, 0, self.vertex_buffer.?.getSize() / @sizeOf(T));
     }
 
     pub fn free(self: *VertexBuffer) void {

@@ -51,12 +51,13 @@ pub fn tick(
                 polygon_mod.call(.init);
                 // app.terrain = try terrain.create_terrain(renderer, core, "HEIGHTMAP.png");
                 app.polygon = try polygon.create_polygon(&.{
-                    .{ .x = math.Vec2.init(5.0, 5.0) },
-                    .{ .x = math.Vec2.init(7.0, 11.0) },
-                    .{ .x = math.Vec2.init(5.0, 10.0) },
-                    .{ .x = math.Vec2.init(9.0, 5.0) },
-                    .{ .x = math.Vec2.init(14.0, 2.0) },
-                    .{ .x = math.Vec2.init(10.0, 8.0) },
+                    math.Vec2.init(62.742857, 106.97143),
+                    math.Vec2.init(93.085712, 65.828571),
+                    math.Vec2.init(147.08571, 85.628572),
+                    math.Vec2.init(122.14285, 144.77143),
+                    math.Vec2.init(102.34286, 93.857142),
+                    math.Vec2.init(79.199998, 130.37143),
+                    math.Vec2.init(81.00000, 105.17143),
                 });
             },
             .close => core.exit(),
