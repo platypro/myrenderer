@@ -40,20 +40,11 @@ const TreeNode = struct {
     const Type = enum(u2) { point, segment, trapezoid };
 };
 
-const PointMap = struct {
-    backend: MountainList,
-    allocator: std.mem.Allocator,
+const MountainList = struct {
+    backend: std.ArrayListUnmanaged(Mountain) = .empty,
 
     const Mountain = struct { p1: PointID, p2: PointID, list: List = .empty };
-    const MountainList = std.ArrayListUnmanaged(Mountain);
     const List = std.ArrayListUnmanaged(PointID);
-
-    fn init(allocator: std.mem.Allocator) @This() {
-        return .{
-            .backend = .empty,
-            .allocator = allocator,
-        };
-    }
 
     fn add_point(self: *@This(), tree: *Triangulation, key: NodeID, p1: PointID, p2: PointID) !void {
         var found_item: ?*Mountain = null;
@@ -63,11 +54,11 @@ const PointMap = struct {
             }
         }
         if (found_item == null) {
-            found_item = try self.backend.addOne(self.allocator);
+            found_item = try self.backend.addOne(tree.allocator);
             found_item.?.* = .{ .list = .empty, .p1 = tree.get(key, .point1).?, .p2 = tree.get(key, .point2).? };
         }
-        try found_item.?.list.append(self.allocator, p1);
-        try found_item.?.list.append(self.allocator, p2);
+        try found_item.?.list.append(tree.allocator, p1);
+        try found_item.?.list.append(tree.allocator, p2);
     }
 };
 
@@ -506,7 +497,7 @@ pub fn create_polygon(
     // Part 2: Monotone Mountains
     //
 
-    var monotone_mountains = PointMap.init(self.allocator);
+    var monotone_mountains = MountainList{};
 
     // Pass over trapezoids to generate monotone mountains.
     // 1) Determine if trapezoid is inside or outside. Look at the edge and see if
@@ -594,4 +585,5 @@ pub fn create_polygon(
             }
         }
     }
+    monotone_mountains.backend.clearAndFree(self.allocator);
 }
