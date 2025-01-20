@@ -12,7 +12,8 @@ pub const mach_systems = .{ .main, .init, .tick, .deinit };
 
 is_initialized: bool,
 terrain: mach.ObjectID,
-polygon: mach.ObjectID,
+polygon1: mach.ObjectID,
+polygon2: mach.ObjectID,
 
 pub const main = mach.schedule(.{
     .{ mach.Core, .init },
@@ -50,7 +51,7 @@ pub fn tick(
                 terrain_mod.call(.init);
                 polygon_mod.call(.init);
                 // app.terrain = try terrain.create_terrain(renderer, core, "HEIGHTMAP.png");
-                app.polygon = try polygon.create_polygon(&.{
+                app.polygon1 = try polygon.create_polygon(&.{
                     math.Vec2.init(62.742857, 106.97143),
                     math.Vec2.init(93.085712, 65.828571),
                     math.Vec2.init(147.08571, 85.628572),
@@ -58,6 +59,13 @@ pub fn tick(
                     math.Vec2.init(102.34286, 93.857142),
                     math.Vec2.init(79.199998, 130.37143),
                     math.Vec2.init(81.00000, 105.17143),
+                });
+
+                app.polygon2 = try polygon.create_polygon(&.{
+                    math.Vec2.init(10.0, 10.0),
+                    math.Vec2.init(40.0, 10.0),
+                    math.Vec2.init(40.0, 40.0),
+                    math.Vec2.init(10.0, 40.0),
                 });
             },
             .close => core.exit(),
