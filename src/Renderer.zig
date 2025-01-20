@@ -372,12 +372,15 @@ pub const Pipeline = struct {
             }
         }
 
-        const buffer_descriptor = mach.gpu.Buffer.Descriptor{
-            .mapped_at_creation = .false,
-            .size = buffer_size,
-            .usage = .{ .copy_dst = true, .storage = true, .uniform = true },
-        };
-        const buffer = device.createBuffer(&buffer_descriptor);
+        var buffer: ?*mach.gpu.Buffer = null;
+        if (buffer_size != 0) {
+            const buffer_descriptor = mach.gpu.Buffer.Descriptor{
+                .mapped_at_creation = .false,
+                .size = buffer_size,
+                .usage = .{ .copy_dst = true, .storage = true, .uniform = true },
+            };
+            buffer = device.createBuffer(&buffer_descriptor);
+        }
 
         const bind_group_entries = try renderer.core.allocator.alloc(mach.gpu.BindGroup.Entry, bindings.len);
 
@@ -397,13 +400,13 @@ pub const Pipeline = struct {
                             entry.buffer = binding.buffer.?;
                         },
                         .managed_single => {
-                            entry.buffer = buffer;
+                            entry.buffer = buffer.?;
                             entry.offset = walking_offset;
                             entry.size = pad_size(binding.size);
                             walking_offset += entry.size;
                         },
                         .managed_often => {
-                            entry.buffer = buffer;
+                            entry.buffer = buffer.?;
                             entry.offset = walking_offset;
                             entry.size = pad_size(binding.size) * MAX_COPIES;
                             walking_offset += entry.size;
@@ -486,7 +489,7 @@ pub const VertexBuffer = struct {
 
 pub const Instance = struct {
     pipeline: mach.ObjectID,
-    buffer: *mach.gpu.Buffer,
+    buffer: ?*mach.gpu.Buffer,
     bind_group: ?*mach.gpu.BindGroup = null,
     bind_group_entries: []mach.gpu.BindGroup.Entry,
     vertex_buffer: VertexBuffer = .{},
