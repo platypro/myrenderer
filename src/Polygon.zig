@@ -27,7 +27,7 @@ const GPUVertex = struct {
 };
 
 const shader_render_src =
-    Renderer.fragment_pass_struct_source ++
+    Renderer.Pipeline.fragment_pass_struct_source ++
     \\ @group(1) @binding(0) var<uniform> world_xform: mat4x4<f32>;
     \\
     \\ @vertex fn vertex_main(@location(0) Vertex: vec2<f32>, @location(1) Color: vec3<f32>) -> FragPass {
@@ -63,7 +63,7 @@ pub fn create_polygon(self: *Polygon, vertices: []const math.Vec2) !mach.ObjectI
 
     try self.triangulation.create_polygon(vertices, &vertex_buffer_arraylist, render_point);
 
-    const instance = try Renderer.Pipeline.spawn_instance(self.renderer, self.pipeline, &.{});
+    const instance = try Renderer.Instance.create(self.renderer, self.pipeline, &.{});
     Renderer.Instance.set_vertex_buffer(self.renderer, instance, vertex_buffer);
 
     return self.polygons.new(.{
