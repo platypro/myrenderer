@@ -28,8 +28,8 @@
             .hash = "122040d9cc905342547e1e9da227a7f16fae5e7ae23134cb62aaef64c5b2c4f58828",
         },
         .mach = .{
-            .url = "git+https://github.com/hexops/mach.git#1d01c915368b0c128ad1fce6123e55c6cc6ded9e",
-            .hash = "122090ee3b387a3906b462314c9c576af2a2bc7b9e15ee81d6556690a46127a1a8e5",
+            .url = "git+https://github.com/platypro/mach.git#77cf4c3051b33d3013bd4b5cdad25537ef006af5",
+            .hash = "1220dd9242e1f8a5c9f6a88b26c1a9fe8b7f8dfe0ece41a781320c31cc52822658c4",
         },
     },
     .paths = .{

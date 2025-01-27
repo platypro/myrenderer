@@ -1,5 +1,5 @@
-pub const mach = @import("mach").math;
 pub const std = @import("std").math;
+pub const mach = @import("root").mach.math;
 
 pub const Mat = mach.Mat4x4;
 pub const Vec2 = mach.Vec2;

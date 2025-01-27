@@ -1,15 +1,19 @@
 const std = @import("std");
-const glfw = @import("zglfw");
-const gpu = @import("zgpu");
-const img = @import("zigimg");
-const mach = @import("mach");
+pub const mach = @import("mach");
+pub const math = @import("math.zig");
+
+pub const Core = mach.Core;
+pub const App = @import("app");
+pub const Renderer = @import("renderer");
+pub const Terrain = @import("terrain");
+pub const Polygon = @import("polygon");
 
 const Modules = mach.Modules(.{
-    mach.Core,
-    @import("App.zig"),
-    @import("Renderer.zig"),
-    @import("Terrain.zig"),
-    @import("Polygon.zig"),
+    Core,
+    App,
+    Renderer,
+    Terrain,
+    Polygon,
 });
 
 pub fn main() !void {
