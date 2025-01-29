@@ -37,9 +37,9 @@ pub fn unirand_seed(top: u32) Unirand {
     }
     rand.offset = global_rand.int(u32) % (top - 1) + 1;
 
-    var best_prime: u32 = 2;
+    var best_prime: u32 = 1;
     for (primes) |prime| {
-        if (prime < top and (global_rand.int(u32) % 3 > 0)) {
+        if ((prime < top) and (top % prime != 0) and (global_rand.int(u32) % 3 > 0)) {
             best_prime = prime;
         }
     }

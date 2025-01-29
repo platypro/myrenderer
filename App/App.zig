@@ -70,16 +70,16 @@ pub fn tick(
                     Polygon.Point{ 81.00000, 105.17143 },
                 });
 
-                // app.polygon2 = try polygon.create_polygon(&.{
-                //     Polygon.Point{ 10.0, 10.0 },
-                //     Polygon.Point{ 40.0, 10.0 },
-                //     Polygon.Point{ 40.0, 40.0 },
-                //     Polygon.Point{ 10.0, 40.0 },
-                // });
+                app.polygon2 = try polygon.create_polygon(&.{
+                    Polygon.Point{ 10.0, 10.0 },
+                    Polygon.Point{ 40.0, 10.0 },
+                    Polygon.Point{ 40.0, 40.0 },
+                    Polygon.Point{ 10.0, 40.0 },
+                });
 
                 const base_node = try Renderer.Node.create(renderer, .{});
                 try renderer.nodes.addChild(base_node.id, app.polygon1.getNode(polygon).id);
-                // try renderer.nodes.addChild(base_node.id, app.polygon2.getNode(polygon).id);
+                try renderer.nodes.addChild(base_node.id, app.polygon2.getNode(polygon).id);
                 app.surface2d = try Renderer.Surface.createFromWindow(renderer, base_node, app.window);
                 app.surface2d.set_perspective(renderer, math.Mat.projection2D(.{ .left = 0.0, .right = 200.0, .bottom = 200.0, .top = 0.0, .near = 0.1, .far = 200.0 }));
 
