@@ -3,8 +3,8 @@ const mach = @import("root").mach;
 const math = @import("root").math;
 const Renderer = @import("root").Renderer;
 const Surface = @This();
+const mods = @import("root").getModules();
 
-root_node: Renderer.Node.Handle,
 perspective_matrix: math.Mat = .ident,
 dimensions: math.Vec2,
 frame_counter: u32 = 0,
@@ -13,6 +13,7 @@ data: union(Type) {
         window_id: mach.ObjectID,
         depth_texture: *mach.gpu.Texture = undefined,
         depth_attachment: ?*mach.gpu.TextureView = null,
+        xform_cache: XformCache = .empty,
     },
     managed: struct {
         format: mach.gpu.Texture.Format = .undefined,
@@ -20,8 +21,11 @@ data: union(Type) {
         color_attachment: ?*mach.gpu.TextureView = null,
         depth_texture: *mach.gpu.Texture = undefined,
         depth_attachment: ?*mach.gpu.TextureView = null,
+        xform_cache: XformCache = .empty,
     },
 },
+
+pub const XformCache = std.AutoArrayHashMapUnmanaged(mach.ObjectID, math.Mat);
 
 const Type = enum {
     /// Use the color target from the window's swapchain, and rebuild the depth buffer when necessary
@@ -30,42 +34,40 @@ const Type = enum {
     managed,
 };
 
-pub fn createFromWindow(renderer: *Renderer, root_node: Renderer.Node.Handle, window: mach.ObjectID) !Handle {
-    const result = Handle{ .id = try renderer.surfaces.new(Surface{
+pub fn createFromWindow(window: mach.ObjectID) !Handle {
+    const result = Handle{ .id = try mods.renderer.surfaces.new(Surface{
         .data = .{ .window = .{ .window_id = window } },
-        .root_node = root_node,
         .dimensions = .init(0.0, 0.0),
     }) };
-    result.rebuild(renderer);
+    result.rebuild();
     return result;
 }
 
-pub fn createManaged(renderer: *Renderer, root_node: Renderer.Node.Handle, size: math.Vec2, format: mach.gpu.Texture.Format) !Handle {
-    const result = Handle{ .id = renderer.surfaces.new(Surface{
-        .root_node = root_node,
+pub fn createManaged(size: math.Vec2, format: mach.gpu.Texture.Format) !Handle {
+    const result = Handle{ .id = mods.renderer.surfaces.new(Surface{
         .dimensions = size,
         .data = .{ .managed = .{ .format = format } },
     }) };
-    result.rebuild(renderer);
+    result.rebuild();
     return result;
 }
 
 pub const Handle = struct {
     id: mach.ObjectID,
 
-    pub fn set_perspective(surface: Handle, renderer: *Renderer, perspective: math.Mat) void {
-        renderer.surfaces.set(surface.id, .perspective_matrix, perspective);
+    pub fn set_perspective(surface: Handle, perspective: math.Mat) void {
+        mods.renderer.surfaces.set(surface.id, .perspective_matrix, perspective);
     }
 
-    fn resetTexture(surface: Handle, renderer: *Renderer, texture: **mach.gpu.Texture, view: *?*mach.gpu.TextureView, format: mach.gpu.Texture.Format) void {
+    fn resetTexture(surface: Handle, texture: **mach.gpu.Texture, view: *?*mach.gpu.TextureView, format: mach.gpu.Texture.Format) void {
         if (view.*) |texture_view| {
             texture_view.release();
             texture.*.release();
         }
 
-        const dimensions = renderer.surfaces.get(surface.id, .dimensions);
+        const dimensions = mods.renderer.surfaces.get(surface.id, .dimensions);
 
-        texture.* = renderer.device.createTexture(&.{
+        texture.* = mods.renderer.device.createTexture(&.{
             .usage = .{ .render_attachment = true },
             .dimension = .dimension_2d,
             .size = .{
@@ -80,25 +82,25 @@ pub const Handle = struct {
         view.* = texture.*.createView(&.{});
     }
 
-    pub fn rebuild(surface: Handle, renderer: *Renderer) void {
-        var data = renderer.surfaces.get(surface.id, .data);
+    pub fn rebuild(surface: Handle) void {
+        var data = mods.renderer.surfaces.get(surface.id, .data);
         switch (data) {
             .window => |*window| {
                 const window_dimensions = math.Vec2.init(
-                    @floatFromInt(renderer.core.windows.get(window.window_id, .framebuffer_width)),
-                    @floatFromInt(renderer.core.windows.get(window.window_id, .framebuffer_height)),
+                    @floatFromInt(mods.mach_core.windows.get(window.window_id, .framebuffer_width)),
+                    @floatFromInt(mods.mach_core.windows.get(window.window_id, .framebuffer_height)),
                 );
-                if (!std.meta.eql(window_dimensions, renderer.surfaces.get(surface.id, .dimensions))) {
-                    renderer.surfaces.set(surface.id, .dimensions, window_dimensions);
-                    surface.resetTexture(renderer, &window.depth_texture, &window.depth_attachment, .depth32_float);
+                if (!std.meta.eql(window_dimensions, mods.renderer.surfaces.get(surface.id, .dimensions))) {
+                    mods.renderer.surfaces.set(surface.id, .dimensions, window_dimensions);
+                    surface.resetTexture(&window.depth_texture, &window.depth_attachment, .depth32_float);
                 }
             },
             .managed => |*managed| {
-                surface.resetTexture(renderer, &managed.color_texture, &managed.color_attachment, managed.format);
-                surface.resetTexture(renderer, &managed.depth_texture, &managed.depth_attachment, .depth32_float);
+                surface.resetTexture(&managed.color_texture, &managed.color_attachment, managed.format);
+                surface.resetTexture(&managed.depth_texture, &managed.depth_attachment, .depth32_float);
             },
         }
-        renderer.surfaces.set(surface.id, .data, data);
+        mods.renderer.surfaces.set(surface.id, .data, data);
     }
 
     pub fn resize(surface: Handle, renderer: *Renderer, new_size: math.Vec2) void {
@@ -109,11 +111,11 @@ pub const Handle = struct {
     }
 
     pub fn run_render_pass(
-        surface: Handle,
-        renderer: *Renderer,
+        node: anytype,
         encoder: *mach.gpu.CommandEncoder,
         color: *mach.gpu.TextureView,
         depth: *mach.gpu.TextureView,
+        xform_cache: *XformCache,
         clear_value: ?mach.gpu.Color,
         perspective: math.Mat,
     ) !void {
@@ -141,34 +143,35 @@ pub const Handle = struct {
             .color_attachment_count = color_attachments.len,
             .depth_stencil_attachment = &depth_attachment,
         });
-
-        const node = renderer.surfaces.get(surface.id, .root_node);
-        try node.render(renderer, render_pass, perspective);
+        var nodePass = Renderer.Node.NodePass{ .pass = render_pass, .xform = perspective, .xform_cache = xform_cache };
+        try node.render(&nodePass);
 
         render_pass.end();
     }
 
-    pub fn render(surface: Handle, renderer: *Renderer, encoder: *mach.gpu.CommandEncoder, clear_value: ?mach.gpu.Color) !void {
-        if (renderer.surfaces.get(surface.id, .frame_counter) == renderer.frame_counter) {
+    pub fn render(surface: Handle, node: anytype, encoder: *mach.gpu.CommandEncoder, clear_value: ?mach.gpu.Color) !void {
+        if (mods.renderer.surfaces.get(surface.id, .frame_counter) == mods.renderer.frame_counter) {
             return;
         }
-        const perspective = renderer.surfaces.get(surface.id, .perspective_matrix);
-        switch (renderer.surfaces.get(surface.id, .data)) {
+        const perspective = mods.renderer.surfaces.get(surface.id, .perspective_matrix);
+        var data = mods.renderer.surfaces.get(surface.id, .data);
+        switch (data) {
             .window => |window| {
                 if (window.depth_attachment) |depth_attachment| {
-                    const swap_chain = renderer.core.windows.get(window.window_id, .swap_chain);
+                    const swap_chain = mods.mach_core.windows.get(window.window_id, .swap_chain);
                     const color_attachment = swap_chain.getCurrentTextureView().?;
-                    try surface.run_render_pass(renderer, encoder, color_attachment, depth_attachment, clear_value, perspective);
+                    try run_render_pass(node, encoder, color_attachment, depth_attachment, &data.window.xform_cache, clear_value, perspective);
                 }
             },
             .managed => |managed| {
                 if (managed.depth_attachment) |depth_attachment| {
                     if (managed.color_attachment) |color_attachment| {
-                        try surface.run_render_pass(renderer, encoder, color_attachment, depth_attachment, clear_value, perspective);
+                        try run_render_pass(node, encoder, color_attachment, depth_attachment, &data.managed.xform_cache, clear_value, perspective);
                     }
                 }
             },
         }
+        mods.renderer.surfaces.set(surface.id, .data, data);
     }
 
     pub fn deinit(surface: Handle, renderer: *Renderer) void {

@@ -3,6 +3,7 @@ const mach = @import("root").mach;
 const math = @import("root").math;
 const Renderer = @import("root").Renderer;
 const Polygon = @This();
+const mods = @import("root").getModules();
 
 pub const mach_module = .polygon;
 pub const mach_systems = .{ .init, .deinit };
@@ -86,14 +87,14 @@ pub fn create_polygon(self: *Polygon, vertices: []const Triangulation.Point) !Ha
 
     try self.triangulation.create_polygon(vertices, &ctx, render_point);
 
-    const node = try Renderer.Instance.createNode(self.renderer, .{
+    const node = try Renderer.Instance.createNode(.{
         .pipeline = self.pipeline,
         .bounding_box_p0 = math.Vec3.init(ctx.boundary_p1.x(), ctx.boundary_p1.y(), 0.0),
         .bounding_box_p1 = math.Vec3.init(ctx.boundary_p2.x(), ctx.boundary_p2.y(), 0.0),
     });
 
-    const instance = node.getInstance(self.renderer);
-    instance.set_vertex_buffer(self.renderer, vertex_buffer);
+    const instance = Renderer.Instance.Handle{ .id = node.get_backing() };
+    instance.set_vertex_buffer(vertex_buffer);
 
     return .{ .id = try self.polygons.new(.{
         .vertex_buffer = vertex_buffer,
@@ -103,12 +104,12 @@ pub fn create_polygon(self: *Polygon, vertices: []const Triangulation.Point) !Ha
 
 pub fn init(self: *Polygon, renderer: *Renderer) !void {
     self.renderer = renderer;
-    self.pipeline = try Renderer.Pipeline.create(self.renderer, .{
+    self.pipeline = try Renderer.Pipeline.create(.{
         .vertex_source = shader_render_src,
         .bindings = &.{.{ .location = 0, .type = .{ .builtin = .transform } }},
         .vertex_layout = Renderer.VertexLayout.create(GPUVertex),
     });
-    self.triangulation = Triangulation.new(self.renderer.core.allocator);
+    self.triangulation = Triangulation.new(mods.mach_core.allocator);
 }
 
 pub fn deinit(self: *Polygon) void {

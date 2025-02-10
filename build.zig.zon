@@ -24,12 +24,16 @@
     // internet connectivity.
     .dependencies = .{
         .zigimg = .{
-            .url = "git+https://github.com/zigimg/zigimg.git#5b5d718159c6ec223a54c9bb960690576e5df9c2",
-            .hash = "122040d9cc905342547e1e9da227a7f16fae5e7ae23134cb62aaef64c5b2c4f58828",
+            .url = "git+https://github.com/zigimg/zigimg.git#b1291f89d5053c6141951ca944b1a70c6a17fc92",
+            .hash = "1220e47c132d0a1c95fa6c538a3f4f4064cf3ace6c7bd38979718d8ed16a5fb8ee29",
         },
         .mach = .{
-            .url = "git+https://github.com/platypro/mach.git#77cf4c3051b33d3013bd4b5cdad25537ef006af5",
-            .hash = "1220dd9242e1f8a5c9f6a88b26c1a9fe8b7f8dfe0ece41a781320c31cc52822658c4",
+            .url = "git+https://github.com/platypro/mach.git#37788bf56b18c81a6754f8cb816fb7693c85f355",
+            .hash = "12203c15b71e83f7bc9e364cb8b302e42d630f130eaa838fd90fb4c80d20a7d5bb66",
+        },
+        .uscope = .{
+            .url = "git+https://github.com/jcalabro/uscope.git#97a16495e34138fb99d57a40479a025c171f318f",
+            .hash = "12200dcc8579645c2c88dfb6617e22eaeafe36b8844c6f691c187a321c28ef779ade",
         },
     },
     .paths = .{

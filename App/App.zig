@@ -17,6 +17,7 @@ surface3d: Renderer.Surface.Handle,
 terrain: Renderer.Node.Handle,
 polygon1: Polygon.Handle,
 polygon2: Polygon.Handle,
+base_2d_node: Renderer.Node.Handle,
 draw: Renderer.Draw.Handle,
 
 pub const main = mach.schedule(.{
@@ -41,7 +42,6 @@ pub fn init(
 pub fn tick(
     app: *@This(),
     core: *mach.Core,
-    renderer: *Renderer,
     renderer_mod: Renderer.Mod,
     terrain: *Terrain,
     terrain_mod: Terrain.Mod,
@@ -53,12 +53,16 @@ pub fn tick(
             .window_open => {
                 app.is_initialized = true;
 
-                renderer.adopt_window(app.window);
+                Renderer.adopt_window(app.window);
                 terrain_mod.call(.init);
                 polygon_mod.call(.init);
-                app.terrain = try terrain.create_terrain(renderer, core, "HEIGHTMAP.png");
-                app.surface3d = try Renderer.Surface.createFromWindow(renderer, app.terrain, app.window);
-                app.surface3d.set_perspective(renderer, math.perspective(90, 1.0, 0.1, 200));
+                const app_dir = try std.fs.selfExeDirPathAlloc(core.allocator);
+                defer core.allocator.free(app_dir);
+                const full_heightmap_dir = try std.fs.path.join(core.allocator, &.{ app_dir, "HEIGHTMAP.png" });
+                defer core.allocator.free(full_heightmap_dir);
+                app.terrain = try terrain.create_terrain(core, full_heightmap_dir);
+                app.surface3d = try Renderer.Surface.createFromWindow(app.window);
+                app.surface3d.set_perspective(math.perspective(90, 1.0, 0.1, 200));
 
                 app.polygon1 = try polygon.create_polygon(&.{
                     Polygon.Point{ 62.742857, 106.97143 },
@@ -77,24 +81,24 @@ pub fn tick(
                     Polygon.Point{ 10.0, 40.0 },
                 });
 
-                const base_node = try Renderer.Node.create(renderer, .{});
-                try renderer.nodes.addChild(base_node.id, app.polygon1.getNode(polygon).id);
-                try renderer.nodes.addChild(base_node.id, app.polygon2.getNode(polygon).id);
-                app.surface2d = try Renderer.Surface.createFromWindow(renderer, base_node, app.window);
-                app.surface2d.set_perspective(renderer, math.Mat.projection2D(.{ .left = 0.0, .right = 200.0, .bottom = 200.0, .top = 0.0, .near = 0.1, .far = 200.0 }));
+                app.base_2d_node = try Renderer.Node.create(null, null);
+                try app.base_2d_node.add_child(app.polygon1.getNode(polygon));
+                try app.base_2d_node.add_child(app.polygon2.getNode(polygon));
+                app.surface2d = try Renderer.Surface.createFromWindow(app.window);
+                app.surface2d.set_perspective(math.Mat.projection2D(.{ .left = 0.0, .right = 200.0, .bottom = 200.0, .top = 0.0, .near = 0.1, .far = 200.0 }));
 
-                app.draw = try Renderer.Draw.create(renderer);
+                app.draw = try Renderer.Draw.create();
             },
             .close => core.exit(),
             else => {},
         }
     }
     if (app.is_initialized) {
-        app.draw.begin(renderer);
-        app.draw.clear(renderer, mach.gpu.Color{ .r = 0.259, .g = 0.141, .b = 0.271, .a = 1.0 });
-        try app.draw.draw_surface(renderer, app.surface3d);
-        try app.draw.draw_surface(renderer, app.surface2d);
-        app.draw.end(renderer);
+        app.draw.begin();
+        app.draw.clear(mach.gpu.Color{ .r = 0.259, .g = 0.141, .b = 0.271, .a = 1.0 });
+        try app.draw.draw_surface(app.terrain, app.surface3d);
+        try app.draw.draw_surface(app.base_2d_node, app.surface2d);
+        app.draw.end();
 
         renderer_mod.call(.update);
     }

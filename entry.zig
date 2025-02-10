@@ -16,10 +16,15 @@ const Modules = mach.Modules(.{
     Polygon,
 });
 
+var mods: Modules = undefined;
+
+pub fn getModules() *@TypeOf(mods.mods) {
+    return &mods.mods;
+}
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
-    var mods: Modules = undefined;
     try mods.init(allocator);
     defer mods.deinit(allocator);
 

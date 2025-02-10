@@ -3,6 +3,7 @@ const mach = @import("root").mach;
 const Renderer = @import("root").Renderer;
 const Pipeline = @This();
 const VertexLayout = Renderer.VertexLayout;
+const mods = @import("root").getModules();
 
 pipeline_handle: *mach.gpu.RenderPipeline,
 bind_group_layout: *mach.gpu.BindGroupLayout,
@@ -56,8 +57,8 @@ pub const BindingLayout = struct {
 pub const Handle = struct {
     id: mach.ObjectID,
 
-    pub fn get_builtin_location(pipeline: Handle, renderer: *Renderer, builtin: BindingLayout.Builtin) ?u32 {
-        const bindings = renderer.pipelines.get(pipeline.id, .bindings);
+    pub fn get_builtin_location(pipeline: Handle, builtin: BindingLayout.Builtin) ?u32 {
+        const bindings = mods.renderer.pipelines.get(pipeline.id, .bindings);
         for (bindings) |binding| {
             if (std.meta.eql(binding.type, .{ .builtin = builtin })) {
                 return binding.location;
@@ -70,10 +71,10 @@ pub const Handle = struct {
         renderer.pipelines.lock();
         defer renderer.pipelines.unlock();
 
-        renderer.pipelines.get(pipeline.id, .pipeline_handle).release();
-        renderer.pipelines.get(pipeline.id, .bind_group_layout).release();
-        renderer.core.allocator.free(renderer.pipelines.get(pipeline.id, .bindings));
-        renderer.pipelines.delete(pipeline.id);
+        mods.renderer.pipelines.get(pipeline.id, .pipeline_handle).release();
+        mods.renderer.pipelines.get(pipeline.id, .bind_group_layout).release();
+        mods.mach_core.allocator.free(mods.renderer.pipelines.get(pipeline.id, .bindings));
+        mods.renderer.pipelines.delete(pipeline.id);
     }
 };
 
@@ -86,17 +87,17 @@ pub const Options = struct {
     vertex_layout: ?VertexLayout = null,
 };
 
-pub fn create(renderer: *Renderer, options: Options) !Handle {
-    const device: *mach.gpu.Device = renderer.device;
-    const framebuffer_format = renderer.framebuffer_format;
+pub fn create(options: Options) !Handle {
+    const device: *mach.gpu.Device = mods.renderer.device;
+    const framebuffer_format = mods.renderer.framebuffer_format;
     const vertex_shader = device.createShaderModuleWGSL(null, options.vertex_source);
     defer vertex_shader.release();
 
     const fragment_shader = device.createShaderModuleWGSL(null, if (options.fragment_source) |src| src else fragment_source);
     defer fragment_shader.release();
 
-    const bind_group_entries = try renderer.core.allocator.alloc(mach.gpu.BindGroupLayout.Entry, options.bindings.len);
-    defer renderer.core.allocator.free(bind_group_entries);
+    const bind_group_entries = try mods.mach_core.allocator.alloc(mach.gpu.BindGroupLayout.Entry, options.bindings.len);
+    defer mods.mach_core.allocator.free(bind_group_entries);
 
     for (bind_group_entries, options.bindings) |*entry, binding| {
         const visibility = mach.gpu.ShaderStageFlags{ .vertex = true, .fragment = true };
@@ -158,12 +159,12 @@ pub fn create(renderer: *Renderer, options: Options) !Handle {
     };
 
     const pipeline = Pipeline{
-        .bindings = try renderer.core.allocator.dupe(BindingLayout, options.bindings),
+        .bindings = try mods.mach_core.allocator.dupe(BindingLayout, options.bindings),
         .pipeline_handle = device.createRenderPipeline(&pipeline_descriptor),
         .bind_group_layout = bind_group_layout,
     };
 
-    renderer.pipelines.lock();
-    defer renderer.pipelines.unlock();
-    return .{ .id = try renderer.pipelines.new(pipeline) };
+    mods.renderer.pipelines.lock();
+    defer mods.renderer.pipelines.unlock();
+    return .{ .id = try mods.renderer.pipelines.new(pipeline) };
 }
