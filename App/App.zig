@@ -4,6 +4,7 @@ const math = @import("root").math;
 const Renderer = @import("root").Renderer;
 const Polygon = @import("root").Polygon;
 const Terrain = @import("root").Terrain;
+const mods = @import("root").getModules();
 
 pub const Mod = mach.Mod(@This());
 
@@ -94,6 +95,13 @@ pub fn tick(
         }
     }
     if (app.is_initialized) {
+        const camX: f32 = 10.0 * math.std.cos(mods.renderer.elapsed_time);
+        const camZ: f32 = 10.0 * math.std.sin(mods.renderer.elapsed_time);
+        const cam = math.Vec3.init(camX, 6.0, camZ);
+        const origin = math.Vec3.init(0.0, 0.0, 0.0);
+        const up = math.Vec3.init(0.0, 1.0, 0.0);
+
+        app.terrain.set_xform(math.lookAt(cam, origin, up));
         app.draw.begin();
         app.draw.clear(mach.gpu.Color{ .r = 0.259, .g = 0.141, .b = 0.271, .a = 1.0 });
         try app.draw.draw_surface(app.terrain, app.surface3d);

@@ -52,6 +52,7 @@ pub fn adopt_window(window: mach.ObjectID) void {
 pub fn update() !void {
     mods.renderer.current_buffer_slot = (mods.renderer.current_buffer_slot + 1) % Instance.MAX_COPIES;
     mods.renderer.frame_counter += 1;
+    mods.renderer.elapsed_time += mods.renderer.delta_time;
 }
 
 pub fn deinit() void {}

@@ -35,16 +35,16 @@ pub const NodePass = struct {
 pub const Handle = struct {
     id: mach.ObjectID,
 
-    pub fn set_xform(node: @This(), renderer: *Renderer, xform: math.Mat) void {
-        renderer.nodes.set(node.id, .xform, xform);
-        renderer.nodes.set(node.id, .updated, false);
+    pub fn set_xform(node: @This(), xform: math.Mat) void {
+        mods.renderer.nodes.set(node.id, .xform, xform);
+        mods.renderer.nodes.set(node.id, .updated, false);
     }
 
-    pub fn set_bounding_box(node: @This(), renderer: *Renderer, p0: math.Vec3, p1: math.Vec3) void {
-        renderer.nodes.set(node.id, .bounding_box_p0, p0);
-        renderer.nodes.set(node.id, .bounding_box_p1, p1);
-        renderer.nodes.set(node.id, .dirty_bounding_box, true);
-        renderer.nodes.set(node.id, .updated, false);
+    pub fn set_bounding_box(node: @This(), p0: math.Vec3, p1: math.Vec3) void {
+        mods.renderer.nodes.set(node.id, .bounding_box_p0, p0);
+        mods.renderer.nodes.set(node.id, .bounding_box_p1, p1);
+        mods.renderer.nodes.set(node.id, .dirty_bounding_box, true);
+        mods.renderer.nodes.set(node.id, .updated, false);
     }
 
     pub fn add_child(node: @This(), child: anytype) !void {
@@ -88,7 +88,7 @@ pub const Handle = struct {
         const backing_object = mods.renderer.nodes.get(node.id, .backing_object);
         const old_should_update = pass.should_update;
         if (!mods.renderer.nodes.get(node.id, .updated) or pass.should_update) {
-            print_matrix("Passed xform", pass.xform);
+            // print_matrix("Passed xform", pass.xform);
             const new_xform = math.Mat.mul(&pass.xform, &mods.renderer.nodes.get(node.id, .xform));
             try pass.xform_cache.put(mods.mach_core.allocator, node.id, new_xform);
 
@@ -100,14 +100,14 @@ pub const Handle = struct {
             if (@reduce(.Max, bounding_box_p1.v) != math.std.inf(f32))
                 bounding_box_p1 = math.Mat.mulVec(&new_xform, &bounding_box_p1);
 
-            print_matrix("Xform", new_xform);
-            print_vector("Bounding box p0", mods.renderer.nodes.get(node.id, .bounding_box_p0));
-            print_vector("Bounding box p1", mods.renderer.nodes.get(node.id, .bounding_box_p1));
+            // print_matrix("Xform", new_xform);
+            // print_vector("Bounding box p0", mods.renderer.nodes.get(node.id, .bounding_box_p0));
+            // print_vector("Bounding box p1", mods.renderer.nodes.get(node.id, .bounding_box_p1));
 
             mods.renderer.nodes.set(node.id, .should_render, (@reduce(.And, bounding_box_p1.v > math.Vec4.splat(0.0).v) or @reduce(.And, bounding_box_p0.v < math.Vec4.splat(1.0).v)));
             pass.should_update = true;
             mods.renderer.nodes.set(node.id, .updated, true);
-            std.debug.print("Updating!\n", .{});
+            // std.debug.print("Updating!\n", .{});
         }
 
         pass.xform = pass.xform_cache.get(node.id).?;

@@ -27,25 +27,25 @@ const shader_genvertices_src =
     \\
     \\    const quad_vals = array<vec2<f32>, 6>(
     \\        vec2<f32>(1.0, 0.0),
-    \\        vec2<f32>(1.0, 1.0),
     \\        vec2<f32>(0.0, 0.0),
     \\        vec2<f32>(1.0, 1.0),
-    \\        vec2<f32>(0.0, 1.0),
-    \\        vec2<f32>(0.0, 0.0)
+    \\        vec2<f32>(1.0, 1.0),
+    \\        vec2<f32>(0.0, 0.0),
+    \\        vec2<f32>(0.0, 1.0)
     \\    );
     \\    var quadValue = 0.2 * (quad_vals[vertex_at] + quad_at_coords) - 0.1 * f32(data.size);
     \\
     \\    var quad_lookup = array<u32, 6>(
     \\        quad_at + data.size,
-    \\        quad_at + data.size + 1,
     \\        quad_at,
     \\        quad_at + data.size + 1,
+    \\        quad_at + data.size + 1,
+    \\        quad_at,
     \\        quad_at + 1,
-    \\        quad_at,
     \\    );
     \\
     \\    var vertex_value = heightmap[quad_lookup[vertex_at]];
-    \\    vertex_out = vec4<f32>(quadValue.x, vertex_value, quadValue.y, 1.0);
+    \\    vertex_out = vec4<f32>(quadValue.x, 5.0 * vertex_value, quadValue.y, 1.0);
     \\ }
 ;
 
@@ -100,11 +100,13 @@ pub fn create_terrain(self: *@This(), core: *mach.Core, filename: []const u8) !R
         .{ .location = 1, .size = image_buf_size },
     };
 
+    const terrain_size_float: f32 = @floatFromInt(terrain_size);
+    const bound = terrain_size_float * 0.1;
     const result = try Renderer.Instance.createNode(.{
         .pipeline = self.pipeline,
         .bindings = &bindings,
-        .bounding_box_p0 = math.Vec3.init(0.0, 0.0, 0.0),
-        .bounding_box_p1 = math.Vec3.init(@floatFromInt(terrain_size), 1.0, @floatFromInt(terrain_size)),
+        .bounding_box_p0 = math.Vec3.init(-bound, 0.0, -bound),
+        .bounding_box_p1 = math.Vec3.init(bound, 5.0, bound),
     });
 
     const instance = Renderer.Instance.Handle{ .id = result.get_backing() };
