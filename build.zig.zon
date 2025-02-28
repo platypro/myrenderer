@@ -28,8 +28,8 @@
             .hash = "1220e47c132d0a1c95fa6c538a3f4f4064cf3ace6c7bd38979718d8ed16a5fb8ee29",
         },
         .mach = .{
-            .url = "git+https://github.com/platypro/mach.git#37788bf56b18c81a6754f8cb816fb7693c85f355",
-            .hash = "12203c15b71e83f7bc9e364cb8b302e42d630f130eaa838fd90fb4c80d20a7d5bb66",
+            .url = "git+https://github.com/platypro/mach.git#24ad69e790a3b46d67620b216634a53d2d3b9fd8",
+            .hash = "122038959641ef230f5e0481943f41cd5e297ef53e1e4b8df1b4478e23f60469d0ee",
         },
     },
     .paths = .{
