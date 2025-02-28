@@ -71,11 +71,4 @@ pub fn build(b: *std.Build) !void {
     // This will evaluate the `run` step rather than the default, which is "install".
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
-
-    const debug_step = b.step("debug", "Debug the app");
-
-    const uscope_dep = b.dependency("uscope", .{});
-    const debug_run_step = b.addRunArtifact(uscope_dep.artifact("uscope"));
-
-    debug_step.dependOn(&debug_run_step.step);
 }

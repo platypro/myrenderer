@@ -31,10 +31,6 @@
             .url = "git+https://github.com/platypro/mach.git#37788bf56b18c81a6754f8cb816fb7693c85f355",
             .hash = "12203c15b71e83f7bc9e364cb8b302e42d630f130eaa838fd90fb4c80d20a7d5bb66",
         },
-        .uscope = .{
-            .url = "git+https://github.com/jcalabro/uscope.git#97a16495e34138fb99d57a40479a025c171f318f",
-            .hash = "12200dcc8579645c2c88dfb6617e22eaeafe36b8844c6f691c187a321c28ef779ade",
-        },
     },
     .paths = .{
         "build.zig",
