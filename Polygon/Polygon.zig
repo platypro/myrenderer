@@ -19,7 +19,7 @@ triangulation: Triangulation,
 pipeline: Renderer.Pipeline.Handle,
 polygons: mach.Objects(.{}, struct {
     vertex_buffer: Renderer.VertexBuffer,
-    node: Renderer.Node.Handle,
+    node: Renderer.SceneNode.Handle,
 }),
 
 const GPUVertex = struct {
@@ -34,11 +34,11 @@ const shader_render_src =
     \\ @vertex fn vertex(@location(0) Vertex: vec2<f32>, @location(1) Color: vec3<f32>) -> FragPass {
     \\     return fragPass(world_xform * vec4(Vertex.x, Vertex.y, 1.0, 1.0), vec4(Color,1.0));
     \\ }
-;
+    ;
 
 pub const Handle = struct {
     id: mach.ObjectID,
-    pub fn getNode(self: Handle, module: *Polygon) Renderer.Node.Handle {
+    pub fn getNode(self: Handle, module: *Polygon) Renderer.SceneNode.Handle {
         return module.polygons.get(self.id, .node);
     }
 };
@@ -93,7 +93,7 @@ pub fn create_polygon(self: *Polygon, vertices: []const Triangulation.Point) !Ha
         .bounding_box_p1 = math.Vec3.init(ctx.boundary_p2.x(), ctx.boundary_p2.y(), 0.0),
     });
 
-    const instance = Renderer.Instance.Handle{ .id = node.get_backing() };
+    const instance = node.get_backing();
     instance.set_vertex_buffer(vertex_buffer);
 
     return .{ .id = try self.polygons.new(.{

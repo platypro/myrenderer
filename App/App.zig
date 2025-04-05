@@ -15,10 +15,10 @@ is_initialized: bool,
 window: mach.ObjectID,
 surface2d: Renderer.Surface.Handle,
 surface3d: Renderer.Surface.Handle,
-terrain: Renderer.Node.Handle,
+terrain: Renderer.SceneNode.Handle,
 polygon1: Polygon.Handle,
 polygon2: Polygon.Handle,
-base_2d_node: Renderer.Node.Handle,
+base_2d_node: Renderer.SceneNode.Handle,
 draw: Renderer.Draw.Handle,
 
 pub const main = mach.schedule(.{
@@ -62,7 +62,7 @@ pub fn tick(
                 const full_heightmap_dir = try std.fs.path.join(core.allocator, &.{ app_dir, "HEIGHTMAP.png" });
                 defer core.allocator.free(full_heightmap_dir);
                 app.terrain = try terrain.create_terrain(core, full_heightmap_dir);
-                app.surface3d = try Renderer.Surface.createFromWindow(app.window);
+                app.surface3d = try Renderer.Surface.createWindowScene(app.window, app.terrain);
                 app.surface3d.set_perspective(math.perspective(90, 1.0, 0.1, 200));
 
                 app.polygon1 = try polygon.create_polygon(&.{
@@ -82,10 +82,10 @@ pub fn tick(
                     Polygon.Point{ 10.0, 40.0 },
                 });
 
-                app.base_2d_node = try Renderer.Node.create(null, null);
+                app.base_2d_node = try Renderer.SceneNode.create(null, null);
                 try app.base_2d_node.add_child(app.polygon1.getNode(polygon));
                 try app.base_2d_node.add_child(app.polygon2.getNode(polygon));
-                app.surface2d = try Renderer.Surface.createFromWindow(app.window);
+                app.surface2d = try Renderer.Surface.createWindowScene(app.window, app.base_2d_node);
                 app.surface2d.set_perspective(math.Mat.projection2D(.{ .left = 0.0, .right = 200.0, .bottom = 200.0, .top = 0.0, .near = 0.1, .far = 200.0 }));
 
                 app.draw = try Renderer.Draw.create();
@@ -104,8 +104,8 @@ pub fn tick(
         app.terrain.set_xform(math.lookAt(cam, origin, up));
         app.draw.begin();
         app.draw.clear(mach.gpu.Color{ .r = 0.259, .g = 0.141, .b = 0.271, .a = 1.0 });
-        try app.draw.draw_surface(app.terrain, app.surface3d);
-        try app.draw.draw_surface(app.base_2d_node, app.surface2d);
+        try app.draw.draw_surface(app.surface3d);
+        try app.draw.draw_surface(app.surface2d);
         app.draw.end();
 
         renderer_mod.call(.update);

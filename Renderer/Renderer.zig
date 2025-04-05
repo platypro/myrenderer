@@ -11,7 +11,7 @@ pub const Pipeline = @import("Pipeline.zig");
 pub const Instance = @import("Instance.zig");
 pub const VertexBuffer = @import("VertexBuffer.zig");
 pub const Surface = @import("Surface.zig");
-pub const Node = @import("Node.zig");
+pub const SceneNode = @import("SceneNode.zig");
 pub const Draw = @import("Draw.zig");
 
 pub const Mod = mach.Mod(@This());
@@ -30,7 +30,7 @@ framebuffer_format: mach.gpu.Texture.Format,
 pipelines: mach.Objects(.{}, Pipeline),
 instances: mach.Objects(.{}, Instance),
 surfaces: mach.Objects(.{}, Surface),
-nodes: mach.Objects(.{}, Node),
+scene_nodes: mach.Objects(.{}, SceneNode),
 draws: mach.Objects(.{}, Draw),
 
 pub fn init() !void {

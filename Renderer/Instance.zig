@@ -31,15 +31,14 @@ pub const Binding = struct {
     };
 };
 
-fn render_instance(backing_object: mach.ObjectID, pass: *Renderer.Node.NodePass) void {
-    const instance = Handle{ .id = backing_object };
+fn render_instance(instance: Handle, pass: *Renderer.SceneNode.NodePass) void {
     const pipeline = instance.get_pipeline();
     if (pipeline.get_builtin_location(.transform)) |transform_location| {
         instance.update_buffer(transform_location, 0, math.Mat, &.{pass.xform});
     }
 
     pass.pass.setPipeline(mods.renderer.pipelines.get(pipeline.id, .pipeline_handle));
-    const draw_index: Renderer.VertexBuffer = mods.renderer.instances.get(backing_object, .vertex_buffer);
+    const draw_index: Renderer.VertexBuffer = mods.renderer.instances.get(instance.id, .vertex_buffer);
     if (draw_index.vertex_buffer) |vertex_buffer| {
         pass.pass.setVertexBuffer(0, vertex_buffer, 0, vertex_buffer.getSize());
     }
@@ -79,7 +78,7 @@ fn find_binding(layout: Renderer.Pipeline.BindingLayout, bindings: []const Bindi
     }
 }
 
-pub fn createNode(options: CreateOptions) !Renderer.Node.Handle {
+pub fn createNode(options: CreateOptions) !Renderer.SceneNode.Handle {
     const device: *mach.gpu.Device = mods.renderer.device;
     const bind_group_layout = mods.renderer.pipelines.get(options.pipeline.id, .bind_group_layout);
     const binding_layout = mods.renderer.pipelines.get(options.pipeline.id, .bindings);
@@ -150,7 +149,7 @@ pub fn createNode(options: CreateOptions) !Renderer.Node.Handle {
     defer mods.renderer.instances.unlock();
     const instance_id = try mods.renderer.instances.new(result);
 
-    const node_id = try mods.renderer.nodes.new(.{ .backing_object = instance_id, .onRender = render_instance });
+    const node_id = try mods.renderer.scene_nodes.new(.{ .backing_instance = Renderer.Instance.Handle{ .id = instance_id }, .onRender = render_instance });
     return .{ .id = node_id };
 }
 

@@ -85,7 +85,7 @@ const Uniform = extern struct {
 renderer: *Renderer,
 pipeline: Renderer.Pipeline.Handle,
 
-pub fn create_terrain(self: *@This(), core: *mach.Core, filename: []const u8) !Renderer.Node.Handle {
+pub fn create_terrain(self: *@This(), core: *mach.Core, filename: []const u8) !Renderer.SceneNode.Handle {
     const image_file = try std.fs.cwd().openFile(filename, .{});
     defer image_file.close();
     var stream_source = std.io.StreamSource{ .file = image_file };
@@ -109,7 +109,7 @@ pub fn create_terrain(self: *@This(), core: *mach.Core, filename: []const u8) !R
         .bounding_box_p1 = math.Vec3.init(bound, 5.0, bound),
     });
 
-    const instance = Renderer.Instance.Handle{ .id = result.get_backing() };
+    const instance = result.get_backing();
 
     const COPY_SIZE = 64;
     var counter: u32 = 0;

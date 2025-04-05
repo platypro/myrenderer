@@ -17,9 +17,9 @@ pub const Handle = struct {
         mods.renderer.draws.set(draw.id, .clear_color, color);
     }
 
-    pub fn draw_surface(draw: Handle, node: anytype, surface: Renderer.Surface.Handle) !void {
+    pub fn draw_surface(draw: Handle, surface: Renderer.Surface.Handle) !void {
         const encoder = mods.renderer.draws.get(draw.id, .encoder);
-        try surface.render(node, encoder, mods.renderer.draws.get(draw.id, .clear_color));
+        try surface.render(encoder, mods.renderer.draws.get(draw.id, .clear_color));
         mods.renderer.draws.set(draw.id, .clear_color, null);
     }
 
