@@ -29,7 +29,7 @@ const fragment_source =
     \\@fragment fn fragment(input: FragPass) -> @location(0) vec4<f32> {
     \\    return input.color;
     \\}
-;
+    ;
 
 pub const BindingLayout = struct {
     location: u32,
@@ -54,11 +54,13 @@ pub const BindingLayout = struct {
     };
 };
 
-pub const Handle = struct {
-    id: mach.ObjectID,
+pub const Handle = enum(mach.ObjectID) {
+    _,
+    pub const get = @import("root").generate_getter(Handle, Pipeline, &mods.renderer.pipelines);
+    pub const set = @import("root").generate_setter(Handle, Pipeline, &mods.renderer.pipelines);
 
     pub fn get_builtin_location(pipeline: Handle, builtin: BindingLayout.Builtin) ?u32 {
-        const bindings = mods.renderer.pipelines.get(pipeline.id, .bindings);
+        const bindings = pipeline.get(.bindings);
         for (bindings) |binding| {
             if (std.meta.eql(binding.type, .{ .builtin = builtin })) {
                 return binding.location;
@@ -71,10 +73,10 @@ pub const Handle = struct {
         renderer.pipelines.lock();
         defer renderer.pipelines.unlock();
 
-        mods.renderer.pipelines.get(pipeline.id, .pipeline_handle).release();
-        mods.renderer.pipelines.get(pipeline.id, .bind_group_layout).release();
-        mods.mach_core.allocator.free(mods.renderer.pipelines.get(pipeline.id, .bindings));
-        mods.renderer.pipelines.delete(pipeline.id);
+        pipeline.get(.pipeline_handle).release();
+        pipeline.get(.bind_group_layout).release();
+        mods.mach_core.allocator.free(pipeline.get(.bindings));
+        mods.renderer.pipelines.delete(@intFromEnum(pipeline));
     }
 };
 
@@ -166,5 +168,5 @@ pub fn create(options: Options) !Handle {
 
     mods.renderer.pipelines.lock();
     defer mods.renderer.pipelines.unlock();
-    return .{ .id = try mods.renderer.pipelines.new(pipeline) };
+    return @enumFromInt(try mods.renderer.pipelines.new(pipeline));
 }

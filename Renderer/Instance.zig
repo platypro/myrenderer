@@ -37,15 +37,15 @@ fn render_instance(instance: Handle, pass: *Renderer.SceneNode.NodePass) void {
         instance.update_buffer(transform_location, 0, math.Mat, &.{pass.xform});
     }
 
-    pass.pass.setPipeline(mods.renderer.pipelines.get(pipeline.id, .pipeline_handle));
-    const draw_index: Renderer.VertexBuffer = mods.renderer.instances.get(instance.id, .vertex_buffer);
+    pass.pass.setPipeline(pipeline.get(.pipeline_handle));
+    const draw_index: Renderer.VertexBuffer = instance.get(.vertex_buffer);
     if (draw_index.vertex_buffer) |vertex_buffer| {
         pass.pass.setVertexBuffer(0, vertex_buffer, 0, vertex_buffer.getSize());
     }
     pass.pass.setBindGroup(
         0,
-        mods.renderer.instances.get(instance.id, .bind_group).?,
-        mods.renderer.instances.get(instance.id, .dynamic_offsets),
+        instance.get(.bind_group).?,
+        instance.get(.dynamic_offsets),
     );
     pass.pass.draw(draw_index.vertex_count, draw_index.instance_count, draw_index.first_vertex, draw_index.first_instance);
 }
@@ -80,8 +80,8 @@ fn find_binding(layout: Renderer.Pipeline.BindingLayout, bindings: []const Bindi
 
 pub fn createNode(options: CreateOptions) !Renderer.SceneNode.Handle {
     const device: *mach.gpu.Device = mods.renderer.device;
-    const bind_group_layout = mods.renderer.pipelines.get(options.pipeline.id, .bind_group_layout);
-    const binding_layout = mods.renderer.pipelines.get(options.pipeline.id, .bindings);
+    const bind_group_layout = options.pipeline.get(.bind_group_layout);
+    const binding_layout = options.pipeline.get(.bindings);
 
     // Find size needed for Managed Buffers
     var buffer_size: u64 = 0;
@@ -149,23 +149,25 @@ pub fn createNode(options: CreateOptions) !Renderer.SceneNode.Handle {
     defer mods.renderer.instances.unlock();
     const instance_id = try mods.renderer.instances.new(result);
 
-    const node_id = try mods.renderer.scene_nodes.new(.{ .backing_instance = Renderer.Instance.Handle{ .id = instance_id }, .onRender = render_instance });
-    return .{ .id = node_id };
+    const node_id = try mods.renderer.scene_nodes.new(.{ .backing_instance = @enumFromInt(instance_id), .onRender = render_instance });
+    return @enumFromInt(node_id);
 }
 
 fn pad_size(size: u64) u64 {
     return ((size + 16) & (0xFFFF_FFFF_FFFF_FFF0));
 }
 
-pub const Handle = struct {
-    id: mach.ObjectID,
+pub const Handle = enum(mach.ObjectID) {
+    _,
+    pub const get = @import("root").generate_getter(Handle, Instance, &mods.renderer.instances);
+    pub const set = @import("root").generate_setter(Handle, Instance, &mods.renderer.instances);
 
     pub fn update_buffer(instance: Handle, binding_id: u32, base_offset: u32, T: type, value: []const T) void {
-        const pipeline = mods.renderer.instances.get(instance.id, .pipeline);
+        const pipeline = instance.get(.pipeline);
         const current_buffer_slot = mods.renderer.current_buffer_slot;
         const queue: *mach.gpu.Queue = mods.renderer.queue;
-        const bind_group_entries = mods.renderer.instances.get(instance.id, .bind_group_entries);
-        const bindings = mods.renderer.pipelines.get(pipeline.id, .bindings);
+        const bind_group_entries = instance.get(.bind_group_entries);
+        const bindings = pipeline.get(.bindings);
 
         const entry_opt = entry_loop: {
             for (bind_group_entries) |entry| {
@@ -185,18 +187,18 @@ pub const Handle = struct {
     }
 
     pub fn set_vertex_buffer(instance: Handle, vertex_buffer: VertexBuffer) void {
-        if (mods.renderer.instances.get(instance.id, .vertex_buffer).vertex_buffer) |old_vertex_buffer| {
+        if (instance.get(.vertex_buffer).vertex_buffer) |old_vertex_buffer| {
             old_vertex_buffer.release();
         }
 
-        mods.renderer.instances.set(instance.id, .vertex_buffer, vertex_buffer);
+        instance.set(.vertex_buffer, vertex_buffer);
         if (vertex_buffer.vertex_buffer) |new_vertex_buffer| {
             new_vertex_buffer.reference();
         }
     }
 
     pub fn get_pipeline(instance: Handle) Renderer.Pipeline.Handle {
-        return mods.renderer.instances.get(instance.id, .pipeline);
+        return instance.get(.pipeline);
     }
 
     pub fn destroy(instance: Handle) void {

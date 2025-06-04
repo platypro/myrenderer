@@ -33,19 +33,21 @@ const Type = enum {
 };
 
 pub fn createWindowScene(window: mach.ObjectID, base_node: Renderer.SceneNode.Handle) !Handle {
-    const result = Handle{ .id = try mods.renderer.surfaces.new(Surface{
+    const result: Handle = @enumFromInt(try mods.renderer.surfaces.new(Surface{
         .target = .{ .window_scene = .{ .window_id = window, .base_node = base_node } },
         .dimensions = .init(0.0, 0.0),
-    }) };
+    }));
     result.rebuild();
     return result;
 }
 
-pub const Handle = struct {
-    id: mach.ObjectID,
+pub const Handle = enum(mach.ObjectID) {
+    _,
+    pub const get = @import("root").generate_getter(Handle, Surface, &mods.renderer.surfaces);
+    pub const set = @import("root").generate_setter(Handle, Surface, &mods.renderer.surfaces);
 
     pub fn set_perspective(surface: Handle, perspective: math.Mat) void {
-        mods.renderer.surfaces.set(surface.id, .perspective_matrix, perspective);
+        surface.set(.perspective_matrix, perspective);
     }
 
     fn resetTexture(surface: Handle, texture: **mach.gpu.Texture, view: *?*mach.gpu.TextureView, format: mach.gpu.Texture.Format) void {
@@ -54,7 +56,7 @@ pub const Handle = struct {
             texture.*.release();
         }
 
-        const dimensions = mods.renderer.surfaces.get(surface.id, .dimensions);
+        const dimensions = surface.get(.dimensions);
 
         texture.* = mods.renderer.device.createTexture(&.{
             .usage = .{ .render_attachment = true },
@@ -72,15 +74,15 @@ pub const Handle = struct {
     }
 
     pub fn rebuild(surface: Handle) void {
-        var data = mods.renderer.surfaces.get(surface.id, .target);
+        var data = surface.get(.target);
         switch (data) {
             .window_scene => |*window_scene| {
                 const window_dimensions = math.Vec2.init(
                     @floatFromInt(mods.mach_core.windows.get(window_scene.window_id, .framebuffer_width)),
                     @floatFromInt(mods.mach_core.windows.get(window_scene.window_id, .framebuffer_height)),
                 );
-                if (!std.meta.eql(window_dimensions, mods.renderer.surfaces.get(surface.id, .dimensions))) {
-                    mods.renderer.surfaces.set(surface.id, .dimensions, window_dimensions);
+                if (!std.meta.eql(window_dimensions, surface.get(.dimensions))) {
+                    surface.set(.dimensions, window_dimensions);
                     surface.resetTexture(&window_scene.depth_texture, &window_scene.depth_attachment, .depth32_float);
                 }
             },
@@ -88,7 +90,7 @@ pub const Handle = struct {
             .sub_compose => {},
             .vr_scene => {},
         }
-        mods.renderer.surfaces.set(surface.id, .target, data);
+        surface.set(.target, data);
     }
 
     pub fn resize(surface: Handle, renderer: *Renderer, new_size: math.Vec2) void {
@@ -131,11 +133,11 @@ pub const Handle = struct {
     }
 
     pub fn render(surface: Handle, encoder: *mach.gpu.CommandEncoder, clear_value: ?mach.gpu.Color) !void {
-        if (mods.renderer.surfaces.get(surface.id, .frame_counter) == mods.renderer.frame_counter) {
+        if (surface.get(.frame_counter) == mods.renderer.frame_counter) {
             return;
         }
-        const perspective = mods.renderer.surfaces.get(surface.id, .perspective_matrix);
-        var data = mods.renderer.surfaces.get(surface.id, .target);
+        const perspective = surface.get(.perspective_matrix);
+        var data = surface.get(.target);
         switch (data) {
             .window_scene => |*window| {
                 if (window.depth_attachment) |depth_attachment| {
@@ -151,7 +153,7 @@ pub const Handle = struct {
             .sub_compose => {},
             .vr_scene => {},
         }
-        mods.renderer.surfaces.set(surface.id, .target, data);
+        surface.set(.target, data);
     }
 
     pub fn deinit(surface: Handle, renderer: *Renderer) void {

@@ -17,10 +17,11 @@ renderer: *Renderer,
 
 triangulation: Triangulation,
 pipeline: Renderer.Pipeline.Handle,
-polygons: mach.Objects(.{}, struct {
+polygons: mach.Objects(.{}, PolygonObj),
+const PolygonObj = struct {
     vertex_buffer: Renderer.VertexBuffer,
     node: Renderer.SceneNode.Handle,
-}),
+};
 
 const GPUVertex = struct {
     x: math.Vec2,
@@ -36,10 +37,13 @@ const shader_render_src =
     \\ }
     ;
 
-pub const Handle = struct {
-    id: mach.ObjectID,
-    pub fn getNode(self: Handle, module: *Polygon) Renderer.SceneNode.Handle {
-        return module.polygons.get(self.id, .node);
+pub const Handle = enum(mach.ObjectID) {
+    _,
+    pub const get = @import("root").generate_getter(Handle, PolygonObj, &mods.polygon.polygons);
+    pub const set = @import("root").generate_setter(Handle, PolygonObj, &mods.polygon.polygons);
+
+    pub fn getNode(self: Handle) Renderer.SceneNode.Handle {
+        return self.get(.node);
     }
 };
 
@@ -96,10 +100,10 @@ pub fn create_polygon(self: *Polygon, vertices: []const Triangulation.Point) !Ha
     const instance = node.get_backing();
     instance.set_vertex_buffer(vertex_buffer);
 
-    return .{ .id = try self.polygons.new(.{
+    return @enumFromInt(try self.polygons.new(.{
         .vertex_buffer = vertex_buffer,
         .node = node,
-    }) };
+    }));
 }
 
 pub fn init(self: *Polygon, renderer: *Renderer) !void {

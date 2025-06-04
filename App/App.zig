@@ -83,8 +83,8 @@ pub fn tick(
                 });
 
                 app.base_2d_node = try Renderer.SceneNode.create(null, null);
-                try app.base_2d_node.add_child(app.polygon1.getNode(polygon));
-                try app.base_2d_node.add_child(app.polygon2.getNode(polygon));
+                try app.base_2d_node.add_child(app.polygon1.getNode());
+                try app.base_2d_node.add_child(app.polygon2.getNode());
                 app.surface2d = try Renderer.Surface.createWindowScene(app.window, app.base_2d_node);
                 app.surface2d.set_perspective(math.Mat.projection2D(.{ .left = 0.0, .right = 200.0, .bottom = 200.0, .top = 0.0, .near = 0.1, .far = 200.0 }));
 
